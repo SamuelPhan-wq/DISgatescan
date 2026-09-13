@@ -189,12 +189,14 @@
   }
 
   function postAction(payload){
-    // text/plain avoids a CORS preflight; the server parses it as JSON regardless
-    return fetch(API_URL, {
-      method:'POST',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify(payload)
-    }).then(r=>r.json());
+    // Sent as GET query params rather than POST — Apps Script's redirect
+    // behavior can drop cross-origin POST requests in some browsers, but GET works reliably.
+    const url = new URL(API_URL);
+    Object.keys(payload).forEach(key=>{
+      const value = typeof payload[key] === 'object' ? JSON.stringify(payload[key]) : payload[key];
+      url.searchParams.set(key, value);
+    });
+    return fetch(url.toString()).then(r=>r.json());
   }
 
   function renderQueues(){
