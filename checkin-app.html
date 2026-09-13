@@ -111,6 +111,7 @@
         <div class="feedback idle" id="feedback">No scans yet this session.</div>
         <div class="camera-row">
           <button class="btn" id="camBtn">Try camera scan</button>
+          <button class="btn" id="snapBtn">Snap photo (multiple codes)</button>
           <span class="cam-note" id="camNote">Uses your device camera to read a barcode or QR code.</span>
         </div>
         <video class="cam" id="camVideo" muted playsinline></video>
@@ -126,14 +127,24 @@
 
   <div class="view" id="view-eyp">
     <div class="board">
-      <div class="board-head eyp"><h1>Early Years Programme</h1><p>Last 10 check-ins, most recent first</p></div>
+      <div class="board-head eyp">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+          <div><h1>Early Years Programme</h1><p>Last 10 check-ins, most recent first</p></div>
+          <button class="btn" id="clearEypBtn" style="background:rgba(255,255,255,0.15); border-color:rgba(255,255,255,0.4); color:#fff;">Clear queue</button>
+        </div>
+      </div>
       <div class="slots" id="boardEyp"></div>
     </div>
   </div>
 
   <div class="view" id="view-pyp">
     <div class="board">
-      <div class="board-head pyp"><h1>Primary Years Programme</h1><p>Last 10 check-ins, most recent first</p></div>
+      <div class="board-head pyp">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+          <div><h1>Primary Years Programme</h1><p>Last 10 check-ins, most recent first</p></div>
+          <button class="btn" id="clearPypBtn" style="background:rgba(255,255,255,0.15); border-color:rgba(255,255,255,0.4); color:#fff;">Clear queue</button>
+        </div>
+      </div>
       <div class="slots" id="boardPyp"></div>
     </div>
   </div>
@@ -252,28 +263,104 @@
 
   function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-  function handleScan(rawCode){
-    const code = (rawCode||'').trim(); if(!code) return;
-    const fb = document.getElementById('feedback');
+  async function checkInCode(rawCode){
+    const code = (rawCode||'').trim();
+    if(!code) return {ok:false, code:code};
     const student = roster.find(r => (r.code||'').toString().trim().toLowerCase() === code.toLowerCase());
-    if(!student){
-      fb.className = 'feedback bad';
-      fb.innerHTML = `<div><div class="fb-name">Code not found</div><div class="fb-sub">"${escapeHtml(code)}" isn't in the roster yet — add it under Manage roster.</div></div>`;
-      return;
-    }
+    if(!student) return {ok:false, code:code};
     const program = programForGrade(student.grade);
     const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
     const entry = {code: student.code, name: student.name, grade: student.grade, time: time};
     const newQueue = [entry, ...(queues[program]||[])].slice(0,10);
+    await window.CheckinDB.saveQueue(program, newQueue);
+    queues[program] = newQueue; // optimistic local update so a batch of scans stays accurate before the listener catches up
+    return {ok:true, code:code, name: student.name, grade: student.grade, program: program, time: time};
+  }
 
-    window.CheckinDB.saveQueue(program, newQueue).then(()=>{
-      fb.className = 'feedback ok' + (program==='PYP' ? ' pyp' : '');
-      fb.innerHTML = `<div><div class="fb-name">${escapeHtml(student.name)}</div><div class="fb-sub">${escapeHtml(student.grade||'')} · Checked in · ${time}</div></div>
-        <span class="fb-badge ${program==='PYP'?'pyp':''}">${program}</span>`;
+  function handleScan(rawCode){
+    const code = (rawCode||'').trim(); if(!code) return;
+    const fb = document.getElementById('feedback');
+    checkInCode(code).then(result=>{
+      if(result.ok){
+        fb.className = 'feedback ok' + (result.program==='PYP' ? ' pyp' : '');
+        fb.innerHTML = `<div><div class="fb-name">${escapeHtml(result.name)}</div><div class="fb-sub">${escapeHtml(result.grade||'')} · Checked in · ${result.time}</div></div>
+          <span class="fb-badge ${result.program==='PYP'?'pyp':''}">${result.program}</span>`;
+      } else {
+        fb.className = 'feedback bad';
+        fb.innerHTML = `<div><div class="fb-name">Code not found</div><div class="fb-sub">"${escapeHtml(code)}" isn't in the roster yet — add it under Manage roster.</div></div>`;
+      }
     }).catch(err=>{
       fb.className = 'feedback bad';
       fb.innerHTML = `<div><div class="fb-name">Couldn't save</div><div class="fb-sub">${escapeHtml(String(err))}</div></div>`;
     });
+  }
+
+  async function snapAndScanMultiple(){
+    const video = document.getElementById('camVideo');
+    const note = document.getElementById('camNote');
+    const fb = document.getElementById('feedback');
+    if(!scanning || !video.videoWidth){
+      note.textContent = 'Start the camera first, then use Snap photo.';
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const snapReader = new ZXing.BrowserMultiFormatReader();
+    const found = [];
+    const seen = new Set();
+
+    // Repeatedly find one code, blank out its area, then look again —
+    // this uncovers every code on the pass in a single photo.
+    for(let i=0; i<8; i++){
+      let result;
+      try{
+        result = await snapReader.decodeFromCanvas(canvas);
+      }catch(e){
+        break;
+      }
+      const text = result.getText();
+      if(!seen.has(text)){ seen.add(text); found.push(text); }
+
+      const pts = result.getResultPoints ? result.getResultPoints() : [];
+      if(pts && pts.length){
+        let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+        pts.forEach(p=>{
+          const x=p.getX(), y=p.getY();
+          minX=Math.min(minX,x); maxX=Math.max(maxX,x);
+          minY=Math.min(minY,y); maxY=Math.max(maxY,y);
+        });
+        const pad = 40;
+        ctx.fillStyle = '#808080';
+        ctx.fillRect(Math.max(0,minX-pad), Math.max(0,minY-pad), (maxX-minX)+pad*2, (maxY-minY)+pad*2);
+      } else {
+        break;
+      }
+    }
+
+    if(!found.length){
+      note.textContent = 'No codes found in that shot — hold the pass flatter, closer, and try again.';
+      return;
+    }
+
+    fb.className = 'feedback idle';
+    fb.innerHTML = `<div class="fb-sub">Found ${found.length} code${found.length>1?'s':''} — checking in…</div>`;
+
+    const results = [];
+    for(const code of found){ results.push(await checkInCode(code)); }
+
+    const lines = results.map(r=>{
+      return r.ok
+        ? `<div><strong>${escapeHtml(r.name)}</strong> — ${escapeHtml(r.grade||'')} (${r.program}) checked in</div>`
+        : `<div>"${escapeHtml(r.code)}" — not found in roster</div>`;
+    }).join('');
+    const anyOk = results.some(r=>r.ok);
+    fb.className = 'feedback ' + (anyOk ? 'ok' : 'bad');
+    fb.innerHTML = `<div>${lines}</div>`;
   }
 
   function renderRosterTable(){
@@ -323,6 +410,17 @@
     document.getElementById('bulkText').value = ''; renderRosterTable();
   });
 
+  document.getElementById('clearEypBtn').addEventListener('click', ()=>{
+    if(confirm('Are you sure you want to clear the EYP queue? This can\'t be undone.')){
+      window.CheckinDB.saveQueue('EYP', []);
+    }
+  });
+  document.getElementById('clearPypBtn').addEventListener('click', ()=>{
+    if(confirm('Are you sure you want to clear the PYP queue? This can\'t be undone.')){
+      window.CheckinDB.saveQueue('PYP', []);
+    }
+  });
+
   const scanInput = document.getElementById('scanInput');
   scanInput.addEventListener('keydown', e=>{ if(e.key === 'Enter'){ handleScan(scanInput.value); scanInput.value = ''; } });
   document.addEventListener('click', (e)=>{
@@ -340,7 +438,8 @@
     });
   });
 
-  let codeReader = null, scanning = false, lastValue = '', lastAt = 0;
+  let codeReader = null, scanning = false, lastValue = null, missCount = 0;
+  const MISS_THRESHOLD = 5; // frames with no code detected before the same code can scan again
 
   function stopCamera(){
     const video = document.getElementById('camVideo'), btn = document.getElementById('camBtn');
@@ -348,6 +447,7 @@
     video.style.display = 'none';
     btn.textContent = 'Try camera scan';
     scanning = false;
+    lastValue = null; missCount = 0;
   }
 
   document.getElementById('camBtn').addEventListener('click', async ()=>{
@@ -365,12 +465,15 @@
         video,
         (result) => {
           if(result){
+            missCount = 0;
             const value = result.getText();
-            const now = Date.now();
-            if(value && (value !== lastValue || now - lastAt > 1500)){
-              lastValue = value; lastAt = now;
+            if(value !== lastValue){
+              lastValue = value;
               handleScan(value);
             }
+          } else {
+            missCount++;
+            if(missCount > MISS_THRESHOLD){ lastValue = null; }
           }
         }
       );
@@ -381,6 +484,8 @@
       btn.textContent = 'Try camera scan';
     }
   });
+
+  document.getElementById('snapBtn').addEventListener('click', snapAndScanMultiple);
 })();
 </script>
 </body>
