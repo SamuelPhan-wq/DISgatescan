@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Check-in Queue — EYP / PYP</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qr-scanner/1.4.2/qr-scanner.umd.min.js"></script>
+<script src="https://unpkg.com/@zxing/library@latest"></script>
 <style>
   :root{
     --bg:#FAF8F3; --ink:#21201C; --muted:#8B8577; --line:#DCD6C8; --card:#FFFFFF;
@@ -340,57 +340,45 @@
     });
   });
 
-  let qrScanner = null, nativeStream = null, nativeLoopId = null, nativeDetector = null;
-  let lastNativeValue = '', lastNativeAt = 0;
+  let codeReader = null, scanning = false, lastValue = '', lastAt = 0;
 
   function stopCamera(){
     const video = document.getElementById('camVideo'), btn = document.getElementById('camBtn');
-    if(qrScanner){ qrScanner.stop(); qrScanner = null; }
-    if(nativeLoopId){ cancelAnimationFrame(nativeLoopId); nativeLoopId = null; }
-    if(nativeStream){ nativeStream.getTracks().forEach(t=>t.stop()); nativeStream = null; }
-    video.style.display = 'none'; btn.textContent = 'Try camera scan';
-  }
-
-  async function startNativeDetector(video, note){
-    nativeDetector = new BarcodeDetector({formats:['code_128','code_39','ean_13','ean_8','upc_a','upc_e','itf','qr_code','pdf417','data_matrix']});
-    nativeStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-    video.srcObject = nativeStream; video.style.display = 'block'; await video.play();
-    note.textContent = 'Point a barcode or QR code at the camera.';
-    const loop = async ()=>{
-      if(!nativeStream) return;
-      try{
-        const codes = await nativeDetector.detect(video);
-        if(codes && codes.length){
-          const value = codes[0].rawValue, now = Date.now();
-          if(value && (value !== lastNativeValue || now - lastNativeAt > 1500)){
-            lastNativeValue = value; lastNativeAt = now; handleScan(value);
-          }
-        }
-      }catch(e){}
-      nativeLoopId = requestAnimationFrame(loop);
-    };
-    loop();
-  }
-
-  async function startQrFallback(video, note){
-    if(typeof QrScanner === 'undefined') throw new Error('QrScanner library unavailable');
-    QrScanner.WORKER_PATH = 'https://cdnjs.cloudflare.com/ajax/libs/qr-scanner/1.4.2/qr-scanner-worker.min.js';
-    video.style.display = 'block';
-    qrScanner = new QrScanner(video, result=>{ handleScan(typeof result === 'string' ? result : result.data); }, { returnDetailedScanResult:true });
-    await qrScanner.start();
-    note.textContent = 'Point a QR code at the camera. This browser doesn\'t support native barcode scanning, so only QR codes work here.';
+    if(codeReader){ codeReader.reset(); codeReader = null; }
+    video.style.display = 'none';
+    btn.textContent = 'Try camera scan';
+    scanning = false;
   }
 
   document.getElementById('camBtn').addEventListener('click', async ()=>{
     const video = document.getElementById('camVideo'), note = document.getElementById('camNote'), btn = document.getElementById('camBtn');
-    if(qrScanner || nativeStream){ stopCamera(); return; }
+    if(scanning){ stopCamera(); return; }
     try{
-      if(typeof BarcodeDetector !== 'undefined'){ await startNativeDetector(video, note); }
-      else { await startQrFallback(video, note); }
+      if(typeof ZXing === 'undefined') throw new Error('Scanner library unavailable');
+      codeReader = new ZXing.BrowserMultiFormatReader();
+      video.style.display = 'block';
+      scanning = true;
       btn.textContent = 'Stop camera scan';
+      note.textContent = 'Point a barcode or QR code at the camera.';
+      await codeReader.decodeFromConstraints(
+        { video: { facingMode: 'environment' } },
+        video,
+        (result) => {
+          if(result){
+            const value = result.getText();
+            const now = Date.now();
+            if(value && (value !== lastValue || now - lastAt > 1500)){
+              lastValue = value; lastAt = now;
+              handleScan(value);
+            }
+          }
+        }
+      );
     }catch(err){
       note.textContent = 'Camera permission was blocked or unavailable. Use a USB/Bluetooth scanner or manual entry instead.';
       video.style.display = 'none';
+      scanning = false;
+      btn.textContent = 'Try camera scan';
     }
   });
 })();
