@@ -87,9 +87,9 @@
 <div class="app">
 
   <div class="setup-banner" id="setupBanner">
-    <strong>Setup needed:</strong> open this file in a text editor, find the line
-    <code>const API_URL = 'PASTE_YOUR_APPS_SCRIPT_URL_HERE';</code>
-    near the bottom, and replace the placeholder with your deployed Apps Script web app URL (ends in <code>/exec</code>).
+    <strong>Setup needed:</strong> open this file in a text editor, find the
+    <code>firebaseConfig</code> object near the top of the script, and paste in your
+    own Firebase project's config (from the Firebase console).
   </div>
 
   <div class="top">
@@ -111,7 +111,7 @@
         <div class="feedback idle" id="feedback">No scans yet this session.</div>
         <div class="camera-row">
           <button class="btn" id="camBtn">Try camera scan</button>
-          <span class="cam-note" id="camNote">Uses your device camera to read a barcode or QR code. Open this page at its own web address (not embedded in another site) for the camera to work.</span>
+          <span class="cam-note" id="camNote">Uses your device camera to read a barcode or QR code.</span>
         </div>
         <video class="cam" id="camVideo" muted playsinline></video>
       </div>
@@ -141,7 +141,7 @@
   <div class="view" id="view-roster">
     <div class="card">
       <h2>Roster</h2>
-      <p class="hint">Each code (student ID barcode or QR value) maps to a name and a grade level. Programme (EYP or PYP) is set automatically from the grade. This lives in the Google Sheet behind this page.</p>
+      <p class="hint">Each code (student ID barcode or QR value) maps to a name and a grade level. Programme (EYP or PYP) is set automatically from the grade.</p>
       <table id="rosterTable">
         <thead><tr><th style="width:28%">Code</th><th style="width:30%">Name</th><th style="width:20%">Grade</th><th style="width:14%">Programme</th><th></th></tr></thead>
         <tbody id="rosterBody"></tbody>
@@ -162,16 +162,40 @@
 
 </div>
 
-<script>
-(function(){
-  // ====== SETUP: paste your deployed Apps Script web app URL below ======
-  const API_URL = 'https://script.google.com/a/macros/dislaos.com/s/AKfycbx9SPaOrgpZ78v2fYsZNXhzl85fbFKgMcYwfycK4OhHbM2Z4fSQftpQRIkplihzBI1TDw/exec';
-  // ========================================================================
+<script type="module">
+  // ====== SETUP: paste your Firebase project config below ======
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+  import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
 
-  if(API_URL.indexOf('PASTE_YOUR') === 0){
+  const firebaseConfig = {
+    apiKey: "AIzaSyBFSb5_rV1lASv25jq8AWy1rXARUqEswtU",
+    authDomain: "dis-checkin.firebaseapp.com",
+    databaseURL: "https://dis-checkin-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "dis-checkin",
+    storageBucket: "dis-checkin.firebasestorage.app",
+    messagingSenderId: "360178071489",
+    appId: "1:360178071489:web:be44f3db8e2b6389172140"
+  };
+  // ================================================================
+
+  if(firebaseConfig.apiKey.indexOf('PASTE_') === 0){
     document.getElementById('setupBanner').style.display = 'block';
   }
 
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  // Expose a small API for the classic script below to call
+  window.CheckinDB = {
+    onRoster(cb){ onValue(ref(db, 'roster'), snap => cb(snap.val() || [])); },
+    onQueues(cb){ onValue(ref(db, 'queues'), snap => cb(snap.val() || {EYP:[], PYP:[]})); },
+    saveRoster(rosterArray){ return set(ref(db, 'roster'), rosterArray); },
+    saveQueue(program, list){ return set(ref(db, 'queues/' + program), list); }
+  };
+</script>
+
+<script>
+(function(){
   const GRADE_LIST = ['Nursery','Pre-K1','Pre-K2','Kinder','G1','G2','G3','G4','G5'];
   const PYP_GRADES = new Set(['Kinder','G1','G2','G3','G4','G5']);
   function programForGrade(grade){ return PYP_GRADES.has(grade) ? 'PYP' : 'EYP'; }
@@ -179,25 +203,20 @@
   let roster = [];
   let queues = {EYP:[], PYP:[]};
 
-  function loadData(){
-    fetch(API_URL).then(r=>r.json()).then(data=>{
-      roster = data.roster || [];
-      queues = data.queues || {EYP:[], PYP:[]};
-      renderRosterTable();
-      renderQueues();
-    }).catch(err=>console.error('load failed', err));
+  function whenReady(fn){
+    if(window.CheckinDB){ fn(); } else { setTimeout(()=>whenReady(fn), 50); }
   }
 
-  function postAction(payload){
-    // Sent as GET query params rather than POST — Apps Script's redirect
-    // behavior can drop cross-origin POST requests in some browsers, but GET works reliably.
-    const url = new URL(API_URL);
-    Object.keys(payload).forEach(key=>{
-      const value = typeof payload[key] === 'object' ? JSON.stringify(payload[key]) : payload[key];
-      url.searchParams.set(key, value);
+  whenReady(()=>{
+    window.CheckinDB.onRoster(data=>{
+      roster = Array.isArray(data) ? data.filter(Boolean) : Object.values(data || {});
+      renderRosterTable();
     });
-    return fetch(url.toString()).then(r=>r.json());
-  }
+    window.CheckinDB.onQueues(data=>{
+      queues = { EYP: (data.EYP||[]).filter(Boolean), PYP: (data.PYP||[]).filter(Boolean) };
+      renderQueues();
+    });
+  });
 
   function renderQueues(){
     renderBoard('boardEyp', queues.EYP); renderBoard('boardPyp', queues.PYP);
@@ -236,19 +255,24 @@
   function handleScan(rawCode){
     const code = (rawCode||'').trim(); if(!code) return;
     const fb = document.getElementById('feedback');
-    postAction({action:'scan', code:code}).then(result=>{
-      if(result.ok){
-        fb.className = 'feedback ok' + (result.program==='PYP' ? ' pyp' : '');
-        fb.innerHTML = `<div><div class="fb-name">${escapeHtml(result.name)}</div><div class="fb-sub">${escapeHtml(result.grade||'')} · Checked in · ${escapeHtml(result.time)}</div></div>
-          <span class="fb-badge ${result.program==='PYP'?'pyp':''}">${result.program}</span>`;
-        loadData();
-      } else {
-        fb.className = 'feedback bad';
-        fb.innerHTML = `<div><div class="fb-name">Code not found</div><div class="fb-sub">"${escapeHtml(code)}" isn't in the roster yet — add it under Manage roster.</div></div>`;
-      }
+    const student = roster.find(r => (r.code||'').toString().trim().toLowerCase() === code.toLowerCase());
+    if(!student){
+      fb.className = 'feedback bad';
+      fb.innerHTML = `<div><div class="fb-name">Code not found</div><div class="fb-sub">"${escapeHtml(code)}" isn't in the roster yet — add it under Manage roster.</div></div>`;
+      return;
+    }
+    const program = programForGrade(student.grade);
+    const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    const entry = {code: student.code, name: student.name, grade: student.grade, time: time};
+    const newQueue = [entry, ...(queues[program]||[])].slice(0,10);
+
+    window.CheckinDB.saveQueue(program, newQueue).then(()=>{
+      fb.className = 'feedback ok' + (program==='PYP' ? ' pyp' : '');
+      fb.innerHTML = `<div><div class="fb-name">${escapeHtml(student.name)}</div><div class="fb-sub">${escapeHtml(student.grade||'')} · Checked in · ${time}</div></div>
+        <span class="fb-badge ${program==='PYP'?'pyp':''}">${program}</span>`;
     }).catch(err=>{
       fb.className = 'feedback bad';
-      fb.innerHTML = `<div><div class="fb-name">Couldn't reach the sheet</div><div class="fb-sub">${escapeHtml(String(err))}</div></div>`;
+      fb.innerHTML = `<div><div class="fb-name">Couldn't save</div><div class="fb-sub">${escapeHtml(String(err))}</div></div>`;
     });
   }
 
@@ -283,7 +307,7 @@
   document.getElementById('addRowBtn').addEventListener('click', ()=>{ roster.push({code:'', name:'', grade:'Nursery'}); renderRosterTable(); });
   document.getElementById('saveRosterBtn').addEventListener('click', ()=>{
     const note = document.getElementById('rosterNote'); note.textContent = 'Saving…';
-    postAction({action:'saveRoster', roster:roster}).then(()=>{
+    window.CheckinDB.saveRoster(roster).then(()=>{
       note.textContent = 'Saved.'; setTimeout(()=>{ note.textContent=''; }, 1800);
     }).catch(err=>{ note.textContent = 'Save failed — ' + err; });
   });
@@ -369,9 +393,6 @@
       video.style.display = 'none';
     }
   });
-
-  setInterval(loadData, 2500);
-  loadData();
 })();
 </script>
 </body>
