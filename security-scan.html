@@ -140,9 +140,11 @@
     }catch(e){}
   }
   function playAlert(){
-    // loud double-beep for security check-ins
-    playTone(1200, 140, 0.6, 0);
-    playTone(1200, 140, 0.6, 180);
+    // loud alternating-tone alarm, meant to cut through background noise
+    playTone(1400, 180, 1.0, 0);
+    playTone(900,  180, 1.0, 200);
+    playTone(1400, 180, 1.0, 400);
+    playTone(900,  180, 1.0, 600);
   }
 
   async function checkInCode(rawCode){

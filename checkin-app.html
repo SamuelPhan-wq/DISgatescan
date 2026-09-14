@@ -223,7 +223,18 @@
       renderRosterTable();
     });
     window.CheckinDB.onQueues(data=>{
-      queues = { EYP: (data.EYP||[]).filter(Boolean), PYP: (data.PYP||[]).filter(Boolean) };
+      const newQueues = { EYP: (data.EYP||[]).filter(Boolean), PYP: (data.PYP||[]).filter(Boolean) };
+      const newEypTop = newQueues.EYP[0] ? (newQueues.EYP[0].code + '|' + newQueues.EYP[0].time) : null;
+      const newPypTop = newQueues.PYP[0] ? (newQueues.PYP[0].code + '|' + newQueues.PYP[0].time) : null;
+
+      if(!eypInit){ eypInit = true; }
+      else if(newEypTop && newEypTop !== lastEypTop && isViewActive('eyp')){ playBell('EYP'); }
+
+      if(!pypInit){ pypInit = true; }
+      else if(newPypTop && newPypTop !== lastPypTop && isViewActive('pyp')){ playBell('PYP'); }
+
+      lastEypTop = newEypTop; lastPypTop = newPypTop;
+      queues = newQueues;
       renderQueues();
     });
   });
@@ -275,27 +286,52 @@
       const startTime = audioCtx.currentTime + (delayMs||0)/1000;
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
-      osc.type = 'sine';
+      osc.type = 'square';
       osc.frequency.value = freq;
-      gain.gain.value = 0.22;
+      gain.gain.value = 1.0;
       osc.connect(gain); gain.connect(audioCtx.destination);
       osc.start(startTime);
-      gain.gain.setValueAtTime(0.22, startTime + (duration/1000)*0.6);
+      gain.gain.setValueAtTime(1.0, startTime + (duration/1000)*0.6);
       gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration/1000);
       osc.stop(startTime + duration/1000 + 0.02);
     }catch(e){}
   }
   function playChime(program){
     if(program === 'PYP'){
-      // rising two-note chime for PYP
-      playTone(660, 120, 0);
-      playTone(990, 160, 130);
+      playTone(660, 160, 0);
+      playTone(990, 200, 170);
     } else {
-      // different two-note chime for EYP
-      playTone(523, 120, 0);
-      playTone(784, 160, 130);
+      playTone(523, 160, 0);
+      playTone(784, 200, 170);
     }
   }
+
+  function playBell(program){
+    const base = program === 'PYP' ? 880 : 660;
+    playBellTone(base, 550);
+    playBellTone(base*2, 450);
+  }
+  function playBellTone(freq, duration){
+    if(!audioCtx) return;
+    try{
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      gain.gain.value = 1.0;
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start();
+      gain.gain.setValueAtTime(1.0, audioCtx.currentTime + (duration/1000)*0.6);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration/1000);
+      osc.stop(audioCtx.currentTime + duration/1000);
+    }catch(e){}
+  }
+  function isViewActive(view){
+    const el = document.getElementById('view-' + view);
+    return el && el.classList.contains('active');
+  }
+
+  let lastEypTop = null, lastPypTop = null, eypInit = false, pypInit = false;
 
   async function checkInCode(rawCode){
     const code = (rawCode||'').trim();
@@ -420,6 +456,7 @@
 
   document.querySelectorAll('.tab').forEach(tab=>{
     tab.addEventListener('click', ()=>{
+      ensureAudio();
       document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
       document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
       tab.classList.add('active');
