@@ -263,12 +263,42 @@
 
   function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+  let audioCtx = null;
+  function ensureAudio(){
+    try{
+      if(!audioCtx){ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      if(audioCtx.state === 'suspended'){ audioCtx.resume(); }
+    }catch(e){}
+  }
+  function playBeep(freq, duration){
+    if(!audioCtx) return;
+    try{
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.value = 0.2;
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start();
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration/1000);
+      osc.stop(audioCtx.currentTime + duration/1000);
+    }catch(e){}
+  }
+
   async function checkInCode(rawCode){
     const code = (rawCode||'').trim();
     if(!code) return {ok:false, code:code};
     const student = roster.find(r => (r.code||'').toString().trim().toLowerCase() === code.toLowerCase());
     if(!student) return {ok:false, code:code};
     const program = programForGrade(student.grade);
+
+    const alreadyIn = (queues[program]||[]).some(e =>
+      (e.code||'').toString().trim().toLowerCase() === student.code.toString().trim().toLowerCase()
+    );
+    if(alreadyIn){
+      return {ok:false, duplicate:true, code:code, name:student.name, grade:student.grade, program:program};
+    }
+
     const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
     const entry = {code: student.code, name: student.name, grade: student.grade, time: time};
     const newQueue = [entry, ...(queues[program]||[])].slice(0,10);
@@ -282,9 +312,13 @@
     const fb = document.getElementById('feedback');
     checkInCode(code).then(result=>{
       if(result.ok){
+        playBeep(880, 140);
         fb.className = 'feedback ok' + (result.program==='PYP' ? ' pyp' : '');
         fb.innerHTML = `<div><div class="fb-name">${escapeHtml(result.name)}</div><div class="fb-sub">${escapeHtml(result.grade||'')} · Checked in · ${result.time}</div></div>
           <span class="fb-badge ${result.program==='PYP'?'pyp':''}">${result.program}</span>`;
+      } else if(result.duplicate){
+        fb.className = 'feedback idle';
+        fb.innerHTML = `<div><div class="fb-name">${escapeHtml(result.name)}</div><div class="fb-sub">Already in the ${escapeHtml(result.program)} queue — not added again.</div></div>`;
       } else {
         fb.className = 'feedback bad';
         fb.innerHTML = `<div><div class="fb-name">Code not found</div><div class="fb-sub">"${escapeHtml(code)}" isn't in the roster yet — add it under Manage roster.</div></div>`;
@@ -352,11 +386,12 @@
 
     const results = [];
     for(const code of found){ results.push(await checkInCode(code)); }
+    results.forEach((r,i)=>{ if(r.ok) setTimeout(()=>playBeep(880,140), i*180); });
 
     const lines = results.map(r=>{
-      return r.ok
-        ? `<div><strong>${escapeHtml(r.name)}</strong> — ${escapeHtml(r.grade||'')} (${r.program}) checked in</div>`
-        : `<div>"${escapeHtml(r.code)}" — not found in roster</div>`;
+      if(r.ok) return `<div><strong>${escapeHtml(r.name)}</strong> — ${escapeHtml(r.grade||'')} (${r.program}) checked in</div>`;
+      if(r.duplicate) return `<div><strong>${escapeHtml(r.name)}</strong> — already in the ${escapeHtml(r.program)} queue</div>`;
+      return `<div>"${escapeHtml(r.code)}" — not found in roster</div>`;
     }).join('');
     const anyOk = results.some(r=>r.ok);
     fb.className = 'feedback ' + (anyOk ? 'ok' : 'bad');
@@ -422,7 +457,7 @@
   });
 
   const scanInput = document.getElementById('scanInput');
-  scanInput.addEventListener('keydown', e=>{ if(e.key === 'Enter'){ handleScan(scanInput.value); scanInput.value = ''; } });
+  scanInput.addEventListener('keydown', e=>{ ensureAudio(); if(e.key === 'Enter'){ handleScan(scanInput.value); scanInput.value = ''; } });
   document.addEventListener('click', (e)=>{
     const activeView = document.querySelector('.view.active');
     if(activeView && activeView.id === 'view-scan' && !e.target.closest('input, select, textarea, button')){ scanInput.focus(); }
@@ -452,6 +487,7 @@
 
   document.getElementById('camBtn').addEventListener('click', async ()=>{
     const video = document.getElementById('camVideo'), note = document.getElementById('camNote'), btn = document.getElementById('camBtn');
+    ensureAudio();
     if(scanning){ stopCamera(); return; }
     try{
       if(typeof ZXing === 'undefined') throw new Error('Scanner library unavailable');
