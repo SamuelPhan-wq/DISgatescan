@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="lo">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ຈຸດສະແກນຄວາມປອດໄພ — ເຊັກອິນ</title>
+<script src="https://unpkg.com/@zxing/library@latest"></script>
+<style>
+  :root{
+    --bg:#FAF8F3; --ink:#21201C; --muted:#8B8577; --line:#DCD6C8; --card:#FFFFFF;
+    --eyp:#E2933F; --eyp-soft:#FBEBD6; --pyp:#2F6F76; --pyp-soft:#DEEEEE;
+    --bad:#B0483E; --bad-soft:#F6E1DE;
+    --font-display: Georgia, 'Iowan Old Style', 'Palatino Linotype', serif;
+    --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans Lao', Roboto, sans-serif;
+    --font-data: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--bg); color:var(--ink); font-family:var(--font-ui); -webkit-font-smoothing:antialiased; }
+  button{font-family:inherit;}
+  .app{max-width:560px; margin:0 auto; padding:24px 20px 60px;}
+  .setup-banner{background:#FFF3D6; border:1px solid #E2C066; border-radius:10px; padding:14px 18px; margin-bottom:18px; font-size:13.5px; display:none;}
+  .wordmark{font-family:var(--font-display); font-size:22px; margin-bottom:20px;}
+  .wordmark span{color:var(--muted); font-size:15px; font-family:var(--font-ui); display:block; margin-top:2px;}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px;}
+  .card h2{font-family:var(--font-display); font-weight:normal; font-size:19px; margin:0 0 4px;}
+  .card .hint{color:var(--muted); font-size:13.5px; margin:0 0 18px; line-height:1.6;}
+  .scan-input{width:100%; font-family:var(--font-data); font-size:20px; padding:14px 16px; border:1.5px solid var(--line); border-radius:10px; outline:none; background:#fff; letter-spacing:0.5px;}
+  .scan-input:focus{border-color:var(--ink);}
+  .feedback{margin-top:16px; border-radius:10px; padding:16px 18px; min-height:64px; display:flex; align-items:center; gap:14px; border:1px solid var(--line);}
+  .feedback.idle{color:var(--muted); font-size:14px;}
+  .feedback.ok{background:var(--eyp-soft); border-color:var(--eyp);}
+  .feedback.ok.pyp{background:var(--pyp-soft); border-color:var(--pyp);}
+  .feedback.bad{background:var(--bad-soft); border-color:var(--bad);}
+  .fb-name{font-family:var(--font-display); font-size:19px;}
+  .fb-sub{color:var(--muted); font-size:13px; margin-top:2px;}
+  .fb-badge{font-size:11.5px; padding:3px 9px; border-radius:100px; background:var(--eyp); color:#fff; white-space:nowrap;}
+  .fb-badge.pyp{background:var(--pyp);}
+  .camera-row{margin-top:18px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .btn{border:1px solid var(--line); background:#fff; border-radius:9px; padding:9px 14px; font-size:13.5px; cursor:pointer; color:var(--ink);}
+  .btn:hover{border-color:var(--ink);}
+  .cam-note{font-size:12.5px; color:var(--muted); line-height:1.6;}
+  video.cam{width:100%; max-width:320px; border-radius:10px; margin-top:12px; display:none; border:1px solid var(--line);}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="setup-banner" id="setupBanner">
+    <strong>Setup needed:</strong> paste your Firebase project config into the
+    <code>firebaseConfig</code> object near the top of the script.
+  </div>
+
+  <div class="wordmark">ຈຸດສະແກນຄວາມປອດໄພ<span>Diamond International School</span></div>
+
+  <div class="card">
+    <h2>ສະແກນລະຫັດ</h2>
+    <p class="hint">ກົດໃສ່ຊ່ອງຂ້າງລຸ່ມນີ້ ແລ້ວສະແກນດ້ວຍເຄື່ອງສະແກນບາໂຄດ/QR ແບບ USB ຫຼື Bluetooth — ມັນຈະພິມລະຫັດ ແລະກົດ Enter ໃຫ້ອັດຕະໂນມັດ. ທ່ານຍັງສາມາດພິມລະຫັດແລ້ວກົດ Enter ເພື່ອທົດລອງໄດ້.</p>
+    <input class="scan-input" id="scanInput" placeholder="ກຳລັງລໍຖ້າການສະແກນ…" autocomplete="off" autofocus>
+    <div class="feedback idle" id="feedback">ຍັງບໍ່ມີການສະແກນໃນຄັ້ງນີ້.</div>
+    <div class="camera-row">
+      <button class="btn" id="camBtn">ລອງສະແກນດ້ວຍກ້ອງ</button>
+      <span class="cam-note" id="camNote">ໃຊ້ກ້ອງຂອງອຸປະກອນທ່ານເພື່ອອ່ານບາໂຄດ ຫຼື QR ໂຄດ.</span>
+    </div>
+    <video class="cam" id="camVideo" muted playsinline></video>
+  </div>
+
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+  import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBFSb5_rV1lASv25jq8AWy1rXARUqEswtU",
+    authDomain: "dis-checkin.firebaseapp.com",
+    databaseURL: "https://dis-checkin-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "dis-checkin",
+    storageBucket: "dis-checkin.firebasestorage.app",
+    messagingSenderId: "360178071489",
+    appId: "1:360178071489:web:be44f3db8e2b6389172140"
+  };
+
+  if(firebaseConfig.apiKey.indexOf('PASTE_') === 0){
+    document.getElementById('setupBanner').style.display = 'block';
+  }
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  window.CheckinDB = {
+    onRoster(cb){ onValue(ref(db, 'roster'), snap => cb(snap.val() || [])); },
+    onQueues(cb){ onValue(ref(db, 'queues'), snap => cb(snap.val() || {EYP:[], PYP:[]})); },
+    saveQueue(program, list){ return set(ref(db, 'queues/' + program), list); }
+  };
+</script>
+
+<script>
+(function(){
+  const PYP_GRADES = new Set(['Kinder','G1','G2','G3','G4','G5']);
+  function programForGrade(grade){ return PYP_GRADES.has(grade) ? 'PYP' : 'EYP'; }
+
+  let roster = [];
+  let queues = {EYP:[], PYP:[]};
+
+  function whenReady(fn){
+    if(window.CheckinDB){ fn(); } else { setTimeout(()=>whenReady(fn), 50); }
+  }
+  whenReady(()=>{
+    window.CheckinDB.onRoster(data=>{
+      roster = Array.isArray(data) ? data.filter(Boolean) : Object.values(data || {});
+    });
+    window.CheckinDB.onQueues(data=>{
+      queues = { EYP: (data.EYP||[]).filter(Boolean), PYP: (data.PYP||[]).filter(Boolean) };
+    });
+  });
+
+  function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  let audioCtx = null;
+  function ensureAudio(){
+    try{
+      if(!audioCtx){ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      if(audioCtx.state === 'suspended'){ audioCtx.resume(); }
+    }catch(e){}
+  }
+  function playBeep(freq, duration){
+    if(!audioCtx) return;
+    try{
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.value = 0.2;
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start();
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration/1000);
+      osc.stop(audioCtx.currentTime + duration/1000);
+    }catch(e){}
+  }
+
+  async function checkInCode(rawCode){
+    const code = (rawCode||'').trim();
+    if(!code) return {ok:false, code:code};
+    const student = roster.find(r => (r.code||'').toString().trim().toLowerCase() === code.toLowerCase());
+    if(!student) return {ok:false, code:code};
+    const program = programForGrade(student.grade);
+
+    const alreadyIn = (queues[program]||[]).some(e =>
+      (e.code||'').toString().trim().toLowerCase() === student.code.toString().trim().toLowerCase()
+    );
+    if(alreadyIn){
+      return {ok:false, duplicate:true, code:code, name:student.name, grade:student.grade, program:program};
+    }
+
+    const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    const entry = {code: student.code, name: student.name, grade: student.grade, time: time};
+    const newQueue = [entry, ...(queues[program]||[])].slice(0,10);
+    await window.CheckinDB.saveQueue(program, newQueue);
+    queues[program] = newQueue;
+    return {ok:true, code:code, name: student.name, grade: student.grade, program: program, time: time};
+  }
+
+  function handleScan(rawCode){
+    const code = (rawCode||'').trim(); if(!code) return;
+    const fb = document.getElementById('feedback');
+    checkInCode(code).then(result=>{
+      if(result.ok){
+        playBeep(880, 140);
+        fb.className = 'feedback ok' + (result.program==='PYP' ? ' pyp' : '');
+        fb.innerHTML = `<div><div class="fb-name">${escapeHtml(result.name)}</div><div class="fb-sub">${escapeHtml(result.grade||'')} · ເຊັກອິນແລ້ວ · ${result.time}</div></div>
+          <span class="fb-badge ${result.program==='PYP'?'pyp':''}">${result.program}</span>`;
+      } else if(result.duplicate){
+        fb.className = 'feedback idle';
+        fb.innerHTML = `<div><div class="fb-name">${escapeHtml(result.name)}</div><div class="fb-sub">ຢູ່ໃນຄິວ ${escapeHtml(result.program)} ແລ້ວ — ບໍ່ໄດ້ເພີ່ມຊ້ຳ.</div></div>`;
+      } else {
+        fb.className = 'feedback bad';
+        fb.innerHTML = `<div><div class="fb-name">ບໍ່ພົບລະຫັດ</div><div class="fb-sub">"${escapeHtml(code)}" ຍັງບໍ່ມີໃນລາຍຊື່ນັກຮຽນ.</div></div>`;
+      }
+    }).catch(err=>{
+      fb.className = 'feedback bad';
+      fb.innerHTML = `<div><div class="fb-name">ບັນທຶກບໍ່ສຳເລັດ</div><div class="fb-sub">${escapeHtml(String(err))}</div></div>`;
+    });
+  }
+
+  const scanInput = document.getElementById('scanInput');
+  scanInput.addEventListener('keydown', e=>{ ensureAudio(); if(e.key === 'Enter'){ handleScan(scanInput.value); scanInput.value = ''; } });
+  document.addEventListener('click', (e)=>{
+    if(!e.target.closest('input, select, textarea, button')){ scanInput.focus(); }
+  });
+
+  let codeReader = null, scanning = false, lastValue = null, missCount = 0;
+  const MISS_THRESHOLD = 5;
+
+  function stopCamera(){
+    const video = document.getElementById('camVideo'), btn = document.getElementById('camBtn');
+    if(codeReader){ codeReader.reset(); codeReader = null; }
+    video.style.display = 'none';
+    btn.textContent = 'ລອງສະແກນດ້ວຍກ້ອງ';
+    scanning = false;
+    lastValue = null; missCount = 0;
+  }
+
+  document.getElementById('camBtn').addEventListener('click', async ()=>{
+    const video = document.getElementById('camVideo'), note = document.getElementById('camNote'), btn = document.getElementById('camBtn');
+    ensureAudio();
+    if(scanning){ stopCamera(); return; }
+    try{
+      if(typeof ZXing === 'undefined') throw new Error('Scanner library unavailable');
+      codeReader = new ZXing.BrowserMultiFormatReader();
+      video.style.display = 'block';
+      scanning = true;
+      btn.textContent = 'ຢຸດການສະແກນດ້ວຍກ້ອງ';
+      note.textContent = 'ຫັນບາໂຄດ ຫຼື QR ໂຄດໃສ່ກ້ອງ.';
+      await codeReader.decodeFromConstraints(
+        { video: { facingMode: 'environment' } },
+        video,
+        (result) => {
+          if(result){
+            missCount = 0;
+            const value = result.getText();
+            if(value !== lastValue){
+              lastValue = value;
+              handleScan(value);
+            }
+          } else {
+            missCount++;
+            if(missCount > MISS_THRESHOLD){ lastValue = null; }
+          }
+        }
+      );
+    }catch(err){
+      note.textContent = 'ການອະນຸຍາດໃຊ້ກ້ອງຖືກປະຕິເສດ ຫຼືບໍ່ສາມາດໃຊ້ໄດ້. ກະລຸນາໃຊ້ເຄື່ອງສະແກນ USB/Bluetooth ຫຼືພິມໃສ່ດ້ວຍມືແທນ.';
+      video.style.display = 'none';
+      scanning = false;
+      btn.textContent = 'ລອງສະແກນດ້ວຍກ້ອງ';
+    }
+  });
+})();
+</script>
+</body>
+</html>
