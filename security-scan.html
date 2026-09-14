@@ -123,19 +123,26 @@
       if(audioCtx.state === 'suspended'){ audioCtx.resume(); }
     }catch(e){}
   }
-  function playBeep(freq, duration){
+  function playTone(freq, duration, gainVal, delayMs){
     if(!audioCtx) return;
     try{
+      const startTime = audioCtx.currentTime + (delayMs||0)/1000;
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
-      osc.type = 'sine';
+      osc.type = 'square'; // sharper / more piercing than a sine wave — meant to grab attention
       osc.frequency.value = freq;
-      gain.gain.value = 0.2;
+      gain.gain.value = gainVal;
       osc.connect(gain); gain.connect(audioCtx.destination);
-      osc.start();
-      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration/1000);
-      osc.stop(audioCtx.currentTime + duration/1000);
+      osc.start(startTime);
+      gain.gain.setValueAtTime(gainVal, startTime + (duration/1000)*0.7);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration/1000);
+      osc.stop(startTime + duration/1000 + 0.02);
     }catch(e){}
+  }
+  function playAlert(){
+    // loud double-beep for security check-ins
+    playTone(1200, 140, 0.6, 0);
+    playTone(1200, 140, 0.6, 180);
   }
 
   async function checkInCode(rawCode){
@@ -165,7 +172,7 @@
     const fb = document.getElementById('feedback');
     checkInCode(code).then(result=>{
       if(result.ok){
-        playBeep(880, 140);
+        playAlert();
         fb.className = 'feedback ok' + (result.program==='PYP' ? ' pyp' : '');
         fb.innerHTML = `<div><div class="fb-name">${escapeHtml(result.name)}</div><div class="fb-sub">${escapeHtml(result.grade||'')} · ເຊັກອິນແລ້ວ · ${result.time}</div></div>
           <span class="fb-badge ${result.program==='PYP'?'pyp':''}">${result.program}</span>`;

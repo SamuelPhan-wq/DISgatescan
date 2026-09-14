@@ -159,6 +159,7 @@
       <div class="roster-actions">
         <button class="btn" id="addRowBtn">Add row</button>
         <button class="btn primary" id="saveRosterBtn">Save roster</button>
+        <button class="btn" id="deleteRosterBtn" style="color:var(--bad); border-color:var(--bad);">Delete entire roster</button>
       </div>
       <div class="save-note" id="rosterNote"></div>
     </div>
@@ -268,19 +269,32 @@
       if(audioCtx.state === 'suspended'){ audioCtx.resume(); }
     }catch(e){}
   }
-  function playBeep(freq, duration){
+  function playTone(freq, duration, delayMs){
     if(!audioCtx) return;
     try{
+      const startTime = audioCtx.currentTime + (delayMs||0)/1000;
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.type = 'sine';
       osc.frequency.value = freq;
-      gain.gain.value = 0.2;
+      gain.gain.value = 0.22;
       osc.connect(gain); gain.connect(audioCtx.destination);
-      osc.start();
-      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration/1000);
-      osc.stop(audioCtx.currentTime + duration/1000);
+      osc.start(startTime);
+      gain.gain.setValueAtTime(0.22, startTime + (duration/1000)*0.6);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration/1000);
+      osc.stop(startTime + duration/1000 + 0.02);
     }catch(e){}
+  }
+  function playChime(program){
+    if(program === 'PYP'){
+      // rising two-note chime for PYP
+      playTone(660, 120, 0);
+      playTone(990, 160, 130);
+    } else {
+      // different two-note chime for EYP
+      playTone(523, 120, 0);
+      playTone(784, 160, 130);
+    }
   }
 
   async function checkInCode(rawCode){
@@ -310,7 +324,7 @@
     const fb = document.getElementById('feedback');
     checkInCode(code).then(result=>{
       if(result.ok){
-        playBeep(880, 140);
+        playChime(result.program);
         fb.className = 'feedback ok' + (result.program==='PYP' ? ' pyp' : '');
         fb.innerHTML = `<div><div class="fb-name">${escapeHtml(result.name)}</div><div class="fb-sub">${escapeHtml(result.grade||'')} · Checked in · ${result.time}</div></div>
           <span class="fb-badge ${result.program==='PYP'?'pyp':''}">${result.program}</span>`;
@@ -372,6 +386,18 @@
       }
     });
     document.getElementById('bulkText').value = ''; renderRosterTable();
+  });
+
+  document.getElementById('deleteRosterBtn').addEventListener('click', ()=>{
+    if(confirm('Are you sure you want to delete the ENTIRE roster? Every student will be removed. This can\'t be undone.')){
+      roster = [];
+      renderRosterTable();
+      const note = document.getElementById('rosterNote');
+      note.textContent = 'Deleting…';
+      window.CheckinDB.saveRoster([]).then(()=>{
+        note.textContent = 'Roster deleted.'; setTimeout(()=>{ note.textContent=''; }, 1800);
+      }).catch(err=>{ note.textContent = 'Delete failed — ' + err; });
+    }
   });
 
   document.getElementById('clearEypBtn').addEventListener('click', ()=>{
