@@ -111,7 +111,6 @@
         <div class="feedback idle" id="feedback">No scans yet this session.</div>
         <div class="camera-row">
           <button class="btn" id="camBtn">Try camera scan</button>
-          <button class="btn" id="snapBtn">Snap photo (multiple codes)</button>
           <span class="cam-note" id="camNote">Uses your device camera to read a barcode or QR code.</span>
         </div>
         <video class="cam" id="camVideo" muted playsinline></video>
@@ -165,8 +164,8 @@
     </div>
     <div class="card" style="margin-top:16px;">
       <h2>Bulk add</h2>
-      <p class="hint">One student per line: code, name, grade (Nursery, Pre-K1, Pre-K2, Kinder, G1, G2, G3, G4, G5).</p>
-      <textarea id="bulkText" placeholder="ST1042, Nari Souvannavong, Pre-K2&#10;ST1043, Ben Xiong, G3"></textarea>
+      <p class="hint">One student per line: code, name, grade (Nursery, PreS, Pre-K, Kinder, G1, G2, G3, G4, G5).</p>
+      <textarea id="bulkText" placeholder="ST1042, Nari Souvannavong, Pre-K&#10;ST1043, Ben Xiong, G3"></textarea>
       <div class="roster-actions"><button class="btn" id="bulkAddBtn">Add these rows</button></div>
     </div>
   </div>
@@ -196,7 +195,6 @@
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
 
-  // Expose a small API for the classic script below to call
   window.CheckinDB = {
     onRoster(cb){ onValue(ref(db, 'roster'), snap => cb(snap.val() || [])); },
     onQueues(cb){ onValue(ref(db, 'queues'), snap => cb(snap.val() || {EYP:[], PYP:[]})); },
@@ -207,7 +205,7 @@
 
 <script>
 (function(){
-  const GRADE_LIST = ['Nursery','Pre-K1','Pre-K2','Kinder','G1','G2','G3','G4','G5'];
+  const GRADE_LIST = ['Nursery','PreS','Pre-K','Kinder','G1','G2','G3','G4','G5'];
   const PYP_GRADES = new Set(['Kinder','G1','G2','G3','G4','G5']);
   function programForGrade(grade){ return PYP_GRADES.has(grade) ? 'PYP' : 'EYP'; }
 
@@ -303,7 +301,7 @@
     const entry = {code: student.code, name: student.name, grade: student.grade, time: time};
     const newQueue = [entry, ...(queues[program]||[])].slice(0,10);
     await window.CheckinDB.saveQueue(program, newQueue);
-    queues[program] = newQueue; // optimistic local update so a batch of scans stays accurate before the listener catches up
+    queues[program] = newQueue;
     return {ok:true, code:code, name: student.name, grade: student.grade, program: program, time: time};
   }
 
@@ -327,75 +325,6 @@
       fb.className = 'feedback bad';
       fb.innerHTML = `<div><div class="fb-name">Couldn't save</div><div class="fb-sub">${escapeHtml(String(err))}</div></div>`;
     });
-  }
-
-  async function snapAndScanMultiple(){
-    const video = document.getElementById('camVideo');
-    const note = document.getElementById('camNote');
-    const fb = document.getElementById('feedback');
-    if(!scanning || !video.videoWidth){
-      note.textContent = 'Start the camera first, then use Snap photo.';
-      return;
-    }
-
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    const snapReader = new ZXing.BrowserMultiFormatReader();
-    const found = [];
-    const seen = new Set();
-
-    // Repeatedly find one code, blank out its area, then look again —
-    // this uncovers every code on the pass in a single photo.
-    for(let i=0; i<8; i++){
-      let result;
-      try{
-        result = await snapReader.decodeFromCanvas(canvas);
-      }catch(e){
-        break;
-      }
-      const text = result.getText();
-      if(!seen.has(text)){ seen.add(text); found.push(text); }
-
-      const pts = result.getResultPoints ? result.getResultPoints() : [];
-      if(pts && pts.length){
-        let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
-        pts.forEach(p=>{
-          const x=p.getX(), y=p.getY();
-          minX=Math.min(minX,x); maxX=Math.max(maxX,x);
-          minY=Math.min(minY,y); maxY=Math.max(maxY,y);
-        });
-        const pad = 40;
-        ctx.fillStyle = '#808080';
-        ctx.fillRect(Math.max(0,minX-pad), Math.max(0,minY-pad), (maxX-minX)+pad*2, (maxY-minY)+pad*2);
-      } else {
-        break;
-      }
-    }
-
-    if(!found.length){
-      note.textContent = 'No codes found in that shot — hold the pass flatter, closer, and try again.';
-      return;
-    }
-
-    fb.className = 'feedback idle';
-    fb.innerHTML = `<div class="fb-sub">Found ${found.length} code${found.length>1?'s':''} — checking in…</div>`;
-
-    const results = [];
-    for(const code of found){ results.push(await checkInCode(code)); }
-    results.forEach((r,i)=>{ if(r.ok) setTimeout(()=>playBeep(880,140), i*180); });
-
-    const lines = results.map(r=>{
-      if(r.ok) return `<div><strong>${escapeHtml(r.name)}</strong> — ${escapeHtml(r.grade||'')} (${r.program}) checked in</div>`;
-      if(r.duplicate) return `<div><strong>${escapeHtml(r.name)}</strong> — already in the ${escapeHtml(r.program)} queue</div>`;
-      return `<div>"${escapeHtml(r.code)}" — not found in roster</div>`;
-    }).join('');
-    const anyOk = results.some(r=>r.ok);
-    fb.className = 'feedback ' + (anyOk ? 'ok' : 'bad');
-    fb.innerHTML = `<div>${lines}</div>`;
   }
 
   function renderRosterTable(){
@@ -474,7 +403,7 @@
   });
 
   let codeReader = null, scanning = false, lastValue = null, missCount = 0;
-  const MISS_THRESHOLD = 5; // frames with no code detected before the same code can scan again
+  const MISS_THRESHOLD = 5;
 
   function stopCamera(){
     const video = document.getElementById('camVideo'), btn = document.getElementById('camBtn');
@@ -520,8 +449,6 @@
       btn.textContent = 'Try camera scan';
     }
   });
-
-  document.getElementById('snapBtn').addEventListener('click', snapAndScanMultiple);
 })();
 </script>
 </body>
