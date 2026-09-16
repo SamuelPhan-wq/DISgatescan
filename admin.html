@@ -85,6 +85,7 @@
   .roster-actions{display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; align-items:center;}
   .save-note{font-size:12.5px; color:var(--muted); margin-top:10px; min-height:16px;}
   .table-scroll{overflow-x:auto;}
+  .view-mode-btn.active{background:var(--ink); color:var(--bg); border-color:var(--ink);}
 </style>
 </head>
 <body>
@@ -213,6 +214,20 @@
         <button class="btn" id="loadRecordsBtn">Load</button>
         <button class="btn" id="exportRecordsBtn">Export CSV</button>
         <span class="save-note" id="recordCount" style="margin:0;"></span>
+      </div>
+      <div class="roster-actions" style="margin-top:2px;">
+        <button class="btn view-mode-btn active" data-mode="all">All scans</button>
+        <button class="btn view-mode-btn" data-mode="tardy">Tardy list (after 8:30am)</button>
+        <button class="btn view-mode-btn" data-mode="late">Late pick-up list (after 4:30pm)</button>
+      </div>
+      <div id="tallySection" style="display:none; margin-top:16px;">
+        <h2 style="font-size:16px;">Tally</h2>
+        <div class="table-scroll">
+        <table>
+          <thead><tr><th>Name</th><th>Grade</th><th>Count</th></tr></thead>
+          <tbody id="tallyBody"></tbody>
+        </table>
+        </div>
       </div>
       <div class="table-scroll" style="margin-top:14px;">
       <table id="recordsTable">
@@ -644,31 +659,79 @@
     recordMonthInput.value = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
   })();
   let currentRecords = [];
+  let recordsViewMode = 'all';
+
+  function isTardy(ts){
+    const d = new Date(ts);
+    const mins = d.getHours()*60 + d.getMinutes();
+    return mins >= (8*60+30) && mins < 12*60;
+  }
+  function isLatePickup(ts){
+    const d = new Date(ts);
+    const mins = d.getHours()*60 + d.getMinutes();
+    return mins >= (16*60+30);
+  }
+  function filteredRecords(){
+    if(recordsViewMode === 'tardy') return currentRecords.filter(r=>isTardy(r.ts));
+    if(recordsViewMode === 'late') return currentRecords.filter(r=>isLatePickup(r.ts));
+    return currentRecords;
+  }
+  function renderRecordsView(){
+    const rows = filteredRecords();
+    const tallySection = document.getElementById('tallySection');
+    if(recordsViewMode === 'all'){
+      tallySection.style.display = 'none';
+    } else {
+      tallySection.style.display = 'block';
+      const tally = {};
+      rows.forEach(r=>{
+        const key = r.studentId || r.name;
+        if(!tally[key]) tally[key] = {name:r.name, grade:r.grade, count:0};
+        tally[key].count++;
+      });
+      const list = Object.values(tally).sort((a,b)=> b.count - a.count || a.name.localeCompare(b.name));
+      document.getElementById('tallyBody').innerHTML = list.length
+        ? list.map(t=>`<tr><td>${escapeHtml(t.name)}</td><td>${escapeHtml(t.grade)}</td><td>${t.count}</td></tr>`).join('')
+        : '<tr><td colspan="3" class="empty-row">No entries.</td></tr>';
+    }
+    const body = document.getElementById('recordsBody'); body.innerHTML='';
+    rows.forEach(r=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.time)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.grade)}</td><td>${escapeHtml(r.program)}</td><td>${escapeHtml(r.guardian)}</td><td>${escapeHtml(r.code)}</td>`;
+      body.appendChild(tr);
+    });
+    const label = recordsViewMode==='all' ? ' this month' : (recordsViewMode==='tardy' ? ' tardy arrivals' : ' late pick-ups');
+    document.getElementById('recordCount').textContent = rows.length + ' scan' + (rows.length===1?'':'s') + label;
+  }
+  document.querySelectorAll('.view-mode-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.view-mode-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      recordsViewMode = btn.dataset.mode;
+      renderRecordsView();
+    });
+  });
+
   function loadRecords(){
     const monthKey = recordMonthInput.value;
     if(!monthKey) return;
     document.getElementById('recordCount').textContent = 'Loading…';
     window.CheckinDB.getMonthLog(monthKey).then(rows=>{
       currentRecords = rows;
-      const body = document.getElementById('recordsBody'); body.innerHTML='';
-      rows.forEach(r=>{
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.time)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.grade)}</td><td>${escapeHtml(r.program)}</td><td>${escapeHtml(r.guardian)}</td><td>${escapeHtml(r.code)}</td>`;
-        body.appendChild(tr);
-      });
-      document.getElementById('recordCount').textContent = rows.length + ' scan' + (rows.length===1?'':'s') + ' this month';
+      renderRecordsView();
     });
   }
   document.getElementById('loadRecordsBtn').addEventListener('click', loadRecords);
   document.getElementById('exportRecordsBtn').addEventListener('click', ()=>{
     if(!currentRecords.length){ loadRecords(); return; }
+    const rows = filteredRecords();
     const header = ['Date','Time','Name','Grade','Programme','Guardian','Card'];
-    const rows = currentRecords.map(r=>[r.date,r.time,r.name,r.grade,r.program,r.guardian,r.code]);
-    const csv = [header, ...rows].map(row=>row.map(v=>`"${(v||'').toString().replace(/"/g,'""')}"`).join(',')).join('\n');
+    const body = rows.map(r=>[r.date,r.time,r.name,r.grade,r.program,r.guardian,r.code]);
+    const csv = [header, ...body].map(row=>row.map(v=>`"${(v||'').toString().replace(/"/g,'""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], {type:'text/csv'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'checkin-records-' + recordMonthInput.value + '.csv';
+    a.href = url; a.download = 'checkin-' + recordsViewMode + '-' + recordMonthInput.value + '.csv';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
   });
