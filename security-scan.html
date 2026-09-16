@@ -29,12 +29,10 @@
   .feedback{margin-top:16px; border-radius:10px; padding:16px 18px; min-height:64px; display:flex; align-items:center; gap:14px; border:1px solid var(--line);}
   .feedback.idle{color:var(--muted); font-size:14px;}
   .feedback.ok{background:var(--eyp-soft); border-color:var(--eyp);}
-  .feedback.ok.pyp{background:var(--pyp-soft); border-color:var(--pyp);}
   .feedback.bad{background:var(--bad-soft); border-color:var(--bad);}
-  .fb-name{font-family:var(--font-display); font-size:19px;}
+  .fb-name{font-family:var(--font-display); font-size:18px; margin-bottom:4px;}
   .fb-sub{color:var(--muted); font-size:13px; margin-top:2px;}
-  .fb-badge{font-size:11.5px; padding:3px 9px; border-radius:100px; background:var(--eyp); color:#fff; white-space:nowrap;}
-  .fb-badge.pyp{background:var(--pyp);}
+  .fb-lines div{font-size:14px; padding:2px 0;}
   .camera-row{margin-top:18px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
   .btn{border:1px solid var(--line); background:#fff; border-radius:9px; padding:9px 14px; font-size:13.5px; cursor:pointer; color:var(--ink);}
   .btn:hover{border-color:var(--ink);}
@@ -53,8 +51,8 @@
   <div class="wordmark">ຈຸດສະແກນຄວາມປອດໄພ<span>Diamond International School</span></div>
 
   <div class="card">
-    <h2>ສະແກນລະຫັດ</h2>
-    <p class="hint">ກົດໃສ່ຊ່ອງຂ້າງລຸ່ມນີ້ ແລ້ວສະແກນດ້ວຍເຄື່ອງສະແກນບາໂຄດ/QR ແບບ USB ຫຼື Bluetooth — ມັນຈະພິມລະຫັດ ແລະກົດ Enter ໃຫ້ອັດຕະໂນມັດ. ທ່ານຍັງສາມາດພິມລະຫັດແລ້ວກົດ Enter ເພື່ອທົດລອງໄດ້.</p>
+    <h2>ສະແກນບັດ</h2>
+    <p class="hint">ສະແກນບັດຮັບ-ສົ່ງຂອງຜູ້ປົກຄອງດ້ວຍເຄື່ອງສະແກນ USB/Bluetooth (ພິມລະຫັດ ແລະກົດ Enter ອັດຕະໂນມັດ) ຫຼືພິມລະຫັດແລ້ວກົດ Enter. ບັດໜຶ່ງໃບອາດມີນັກຮຽນຫຼາຍຄົນ (ອ້າຍນ້ອງ) — ທຸກຄົນຈະຖືກເຊັກອິນພ້ອມກັນ.</p>
     <input class="scan-input" id="scanInput" placeholder="ກຳລັງລໍຖ້າການສະແກນ…" autocomplete="off" autofocus>
     <div class="feedback idle" id="feedback">ຍັງບໍ່ມີການສະແກນໃນຄັ້ງນີ້.</div>
     <div class="camera-row">
@@ -68,7 +66,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-  import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
+  import { getDatabase, ref, onValue, set, push } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyBFSb5_rV1lASv25jq8AWy1rXARUqEswtU",
@@ -88,9 +86,20 @@
   const db = getDatabase(app);
 
   window.CheckinDB = {
-    onRoster(cb){ onValue(ref(db, 'roster'), snap => cb(snap.val() || [])); },
+    onStudents(cb){ onValue(ref(db, 'students'), snap=>{ const v=snap.val()||{}; cb(Object.entries(v).map(([id,d])=>({id, name:d.name||'', grade:d.grade||'Nursery'}))); }); },
+    onCards(cb){ onValue(ref(db, 'cards'), snap=>{ const v=snap.val()||{}; cb(Object.entries(v).map(([code,d])=>({code, guardian:d.guardian||'', studentIds:d.studentIds||[]}))); }); },
     onQueues(cb){ onValue(ref(db, 'queues'), snap => cb(snap.val() || {EYP:[], PYP:[]})); },
-    saveQueue(program, list){ return set(ref(db, 'queues/' + program), list); }
+    saveQueue(program, list){ return set(ref(db, 'queues/' + program), list); },
+    logScan(entry, program){
+      const now = new Date();
+      const monthKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+      const r = push(ref(db, 'scanLog/' + monthKey));
+      return set(r, {
+        studentId: entry.studentId, name: entry.name, grade: entry.grade, program,
+        guardian: entry.guardian || '', code: entry.code || '',
+        date: now.toLocaleDateString(), time: entry.time, ts: now.getTime()
+      });
+    }
   };
 </script>
 
@@ -98,23 +107,20 @@
 (function(){
   const PYP_GRADES = new Set(['Kinder','G1','G2','G3','G4','G5']);
   function programForGrade(grade){ return PYP_GRADES.has(grade) ? 'PYP' : 'EYP'; }
+  function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-  let roster = [];
+  let students = [];
+  let cards = [];
   let queues = {EYP:[], PYP:[]};
 
   function whenReady(fn){
     if(window.CheckinDB){ fn(); } else { setTimeout(()=>whenReady(fn), 50); }
   }
   whenReady(()=>{
-    window.CheckinDB.onRoster(data=>{
-      roster = Array.isArray(data) ? data.filter(Boolean) : Object.values(data || {});
-    });
-    window.CheckinDB.onQueues(data=>{
-      queues = { EYP: (data.EYP||[]).filter(Boolean), PYP: (data.PYP||[]).filter(Boolean) };
-    });
+    window.CheckinDB.onStudents(data=>{ students = data; });
+    window.CheckinDB.onCards(data=>{ cards = data; });
+    window.CheckinDB.onQueues(data=>{ queues = { EYP:(data.EYP||[]).filter(Boolean), PYP:(data.PYP||[]).filter(Boolean) }; });
   });
-
-  function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
   let audioCtx = null;
   function ensureAudio(){
@@ -129,7 +135,7 @@
       const startTime = audioCtx.currentTime + (delayMs||0)/1000;
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
-      osc.type = 'square'; // sharper / more piercing than a sine wave — meant to grab attention
+      osc.type = 'square';
       osc.frequency.value = freq;
       gain.gain.value = gainVal;
       osc.connect(gain); gain.connect(audioCtx.destination);
@@ -140,51 +146,58 @@
     }catch(e){}
   }
   function playAlert(){
-    // loud alternating-tone alarm, meant to cut through background noise
     playTone(1400, 180, 1.0, 0);
     playTone(900,  180, 1.0, 200);
     playTone(1400, 180, 1.0, 400);
     playTone(900,  180, 1.0, 600);
   }
 
-  async function checkInCode(rawCode){
+  async function checkInCard(rawCode){
     const code = (rawCode||'').trim();
-    if(!code) return {ok:false, code:code};
-    const student = roster.find(r => (r.code||'').toString().trim().toLowerCase() === code.toLowerCase());
-    if(!student) return {ok:false, code:code};
-    const program = programForGrade(student.grade);
+    if(!code) return {ok:false};
+    const cardEntry = cards.find(c => c.code.trim().toLowerCase() === code.toLowerCase());
+    if(!cardEntry) return {ok:false, notFound:true, code:code};
 
-    const alreadyIn = (queues[program]||[]).some(e =>
-      (e.code||'').toString().trim().toLowerCase() === student.code.toString().trim().toLowerCase()
-    );
-    if(alreadyIn){
-      return {ok:false, duplicate:true, code:code, name:student.name, grade:student.grade, program:program};
+    const results = [];
+    for(const studentId of (cardEntry.studentIds || [])){
+      const student = students.find(s => s.id === studentId);
+      if(!student) continue;
+      const program = programForGrade(student.grade);
+      const alreadyIn = (queues[program]||[]).some(e => e.studentId === studentId);
+      if(alreadyIn){ results.push({ok:false, duplicate:true, name:student.name, grade:student.grade, program:program}); continue; }
+      const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+      const entry = {studentId:studentId, code:cardEntry.code, name:student.name, grade:student.grade, guardian:cardEntry.guardian||'', time:time};
+      const newQueue = [entry, ...(queues[program]||[])].slice(0,10);
+      await window.CheckinDB.saveQueue(program, newQueue);
+      queues[program] = newQueue;
+      await window.CheckinDB.logScan(entry, program);
+      results.push({ok:true, name:student.name, grade:student.grade, program:program, time:time});
     }
-
-    const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-    const entry = {code: student.code, name: student.name, grade: student.grade, time: time};
-    const newQueue = [entry, ...(queues[program]||[])].slice(0,10);
-    await window.CheckinDB.saveQueue(program, newQueue);
-    queues[program] = newQueue;
-    return {ok:true, code:code, name: student.name, grade: student.grade, program: program, time: time};
+    return {ok:true, guardian:cardEntry.guardian, results:results};
   }
 
   function handleScan(rawCode){
     const code = (rawCode||'').trim(); if(!code) return;
     const fb = document.getElementById('feedback');
-    checkInCode(code).then(result=>{
-      if(result.ok){
-        playAlert();
-        fb.className = 'feedback ok' + (result.program==='PYP' ? ' pyp' : '');
-        fb.innerHTML = `<div><div class="fb-name">${escapeHtml(result.name)}</div><div class="fb-sub">${escapeHtml(result.grade||'')} · ເຊັກອິນແລ້ວ · ${result.time}</div></div>
-          <span class="fb-badge ${result.program==='PYP'?'pyp':''}">${result.program}</span>`;
-      } else if(result.duplicate){
-        fb.className = 'feedback idle';
-        fb.innerHTML = `<div><div class="fb-name">${escapeHtml(result.name)}</div><div class="fb-sub">ຢູ່ໃນຄິວ ${escapeHtml(result.program)} ແລ້ວ — ບໍ່ໄດ້ເພີ່ມຊ້ຳ.</div></div>`;
-      } else {
+    checkInCard(code).then(res=>{
+      if(!res.ok){
         fb.className = 'feedback bad';
-        fb.innerHTML = `<div><div class="fb-name">ບໍ່ພົບລະຫັດ</div><div class="fb-sub">"${escapeHtml(code)}" ຍັງບໍ່ມີໃນລາຍຊື່ນັກຮຽນ.</div></div>`;
+        fb.innerHTML = `<div><div class="fb-name">ບໍ່ພົບບັດ</div><div class="fb-sub">"${escapeHtml(code)}" ຍັງບໍ່ໄດ້ຕິດພັນກັບນັກຮຽນ.</div></div>`;
+        return;
       }
+      if(!res.results.length){
+        fb.className = 'feedback bad';
+        fb.innerHTML = `<div><div class="fb-name">${escapeHtml(res.guardian||'ບັດ')}</div><div class="fb-sub">ບັດນີ້ບໍ່ມີນັກຮຽນທີ່ຖືກຕ້ອງຕິດພັນຢູ່.</div></div>`;
+        return;
+      }
+      playAlert();
+      const lines = res.results.map(r=>{
+        if(r.ok) return `<div><strong>${escapeHtml(r.name)}</strong> — ${escapeHtml(r.grade||'')} (${r.program}) ເຊັກອິນແລ້ວ</div>`;
+        return `<div><strong>${escapeHtml(r.name)}</strong> — ຢູ່ໃນຄິວ ${escapeHtml(r.program)} ແລ້ວ</div>`;
+      }).join('');
+      const anyOk = res.results.some(r=>r.ok);
+      fb.className = 'feedback ' + (anyOk ? 'ok' : 'idle');
+      fb.innerHTML = `<div><div class="fb-name">${escapeHtml(res.guardian||'ບັດ')}</div><div class="fb-lines">${lines}</div></div>`;
     }).catch(err=>{
       fb.className = 'feedback bad';
       fb.innerHTML = `<div><div class="fb-name">ບັນທຶກບໍ່ສຳເລັດ</div><div class="fb-sub">${escapeHtml(String(err))}</div></div>`;
@@ -205,8 +218,7 @@
     if(codeReader){ codeReader.reset(); codeReader = null; }
     video.style.display = 'none';
     btn.textContent = 'ລອງສະແກນດ້ວຍກ້ອງ';
-    scanning = false;
-    lastValue = null; missCount = 0;
+    scanning = false; lastValue = null; missCount = 0;
   }
 
   document.getElementById('camBtn').addEventListener('click', async ()=>{
@@ -227,10 +239,7 @@
           if(result){
             missCount = 0;
             const value = result.getText();
-            if(value !== lastValue){
-              lastValue = value;
-              handleScan(value);
-            }
+            if(value !== lastValue){ lastValue = value; handleScan(value); }
           } else {
             missCount++;
             if(missCount > MISS_THRESHOLD){ lastValue = null; }
@@ -239,9 +248,7 @@
       );
     }catch(err){
       note.textContent = 'ການອະນຸຍາດໃຊ້ກ້ອງຖືກປະຕິເສດ ຫຼືບໍ່ສາມາດໃຊ້ໄດ້. ກະລຸນາໃຊ້ເຄື່ອງສະແກນ USB/Bluetooth ຫຼືພິມໃສ່ດ້ວຍມືແທນ.';
-      video.style.display = 'none';
-      scanning = false;
-      btn.textContent = 'ລອງສະແກນດ້ວຍກ້ອງ';
+      video.style.display = 'none'; scanning = false; btn.textContent = 'ລອງສະແກນດ້ວຍກ້ອງ';
     }
   });
 })();

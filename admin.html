@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Check-in Console</title>
+<script src="https://unpkg.com/@zxing/library@latest"></script>
+<style>
+  :root{
+    --bg:#FAF8F3; --ink:#21201C; --muted:#8B8577; --line:#DCD6C8; --card:#FFFFFF;
+    --eyp:#E2933F; --eyp-soft:#FBEBD6; --pyp:#2F6F76; --pyp-soft:#DEEEEE;
+    --bad:#B0483E; --bad-soft:#F6E1DE;
+    --font-display: Georgia, 'Iowan Old Style', 'Palatino Linotype', serif;
+    --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-data: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--bg); color:var(--ink); font-family:var(--font-ui); -webkit-font-smoothing:antialiased; }
+  button{font-family:inherit;}
+  .app{max-width:1150px; margin:0 auto; padding:20px 20px 60px;}
+  .setup-banner{background:#FFF3D6; border:1px solid #E2C066; border-radius:10px; padding:14px 18px; margin-bottom:18px; font-size:13.5px; display:none;}
+  .top{display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:24px; flex-wrap:wrap;}
+  .wordmark{font-family:var(--font-display); font-size:22px;}
+  .wordmark span{color:var(--muted); font-size:15px; font-family:var(--font-ui); display:block; margin-top:2px;}
+  .tabs{display:flex; gap:4px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:4px; flex-wrap:wrap;}
+  .tab{border:none; background:transparent; padding:9px 14px; border-radius:7px; font-size:14px; color:var(--muted); cursor:pointer;}
+  .tab.active{background:var(--ink); color:var(--bg);}
+  .view{display:none;} .view.active{display:block;}
+  .scan-grid{display:grid; grid-template-columns:1.1fr 1fr; gap:20px;}
+  @media (max-width:820px){ .scan-grid{grid-template-columns:1fr;} }
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px;}
+  .card h2{font-family:var(--font-display); font-weight:normal; font-size:19px; margin:0 0 4px;}
+  .card .hint{color:var(--muted); font-size:13.5px; margin:0 0 18px; line-height:1.5;}
+  .scan-input{width:100%; font-family:var(--font-data); font-size:20px; padding:14px 16px; border:1.5px solid var(--line); border-radius:10px; outline:none; background:#fff; letter-spacing:0.5px;}
+  .scan-input:focus{border-color:var(--ink);}
+  .feedback{margin-top:16px; border-radius:10px; padding:16px 18px; min-height:64px; display:flex; align-items:center; gap:14px; border:1px solid var(--line);}
+  .feedback.idle{color:var(--muted); font-size:14px;}
+  .feedback.ok{background:var(--eyp-soft); border-color:var(--eyp);}
+  .feedback.bad{background:var(--bad-soft); border-color:var(--bad);}
+  .fb-name{font-family:var(--font-display); font-size:18px; margin-bottom:4px;}
+  .fb-sub{color:var(--muted); font-size:13px; margin-top:2px;}
+  .fb-lines div{font-size:14px; padding:2px 0;}
+  .camera-row{margin-top:18px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .btn{border:1px solid var(--line); background:#fff; border-radius:9px; padding:9px 14px; font-size:13.5px; cursor:pointer; color:var(--ink);}
+  .btn:hover{border-color:var(--ink);}
+  .btn.primary{background:var(--ink); color:var(--bg); border-color:var(--ink);}
+  .btn.danger{color:var(--bad); border-color:var(--bad);}
+  .cam-note{font-size:12.5px; color:var(--muted); line-height:1.5;}
+  video.cam{width:100%; max-width:320px; border-radius:10px; margin-top:12px; display:none; border:1px solid var(--line);}
+  .mini-title{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+  .mini-title h3{font-family:var(--font-display); font-weight:normal; font-size:16px; margin:0;}
+  .pill{font-size:11.5px; padding:3px 9px; border-radius:100px; color:#fff;}
+  .pill.eyp{background:var(--eyp);} .pill.pyp{background:var(--pyp);}
+  .mini-list{list-style:none; margin:0 0 20px; padding:0;}
+  .mini-list li{display:flex; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); font-size:13.5px;}
+  .mini-list li:last-child{border-bottom:none;}
+  .mini-list .code{font-family:var(--font-data); color:var(--muted); font-size:12px;}
+  .empty-row{color:var(--muted); font-size:13px; padding:8px 0;}
+  .board{background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden;}
+  .board-head{padding:24px 28px; color:#fff;}
+  .board-head.eyp{background:var(--eyp);} .board-head.pyp{background:var(--pyp);}
+  .board-head h1{font-family:var(--font-display); font-weight:normal; font-size:28px; margin:0;}
+  .board-head p{margin:4px 0 0; opacity:0.92; font-size:14px;}
+  .slots{padding:10px 10px 20px;}
+  .slot-wrap{position:relative; margin:6px 4px; border-radius:10px; overflow:hidden;}
+  .slot-remove{position:absolute; inset:0; background:var(--bad); display:flex; align-items:center; justify-content:flex-end; padding-right:14px;}
+  .slot-remove button{border:none; background:transparent; color:#fff; font-size:13px; cursor:pointer; padding:8px 6px;}
+  .slot{display:grid; grid-template-columns:34px 1fr auto; align-items:center; gap:16px; padding:14px 16px; background:#fff; border:1px solid var(--line); border-radius:10px; position:relative; touch-action:pan-y; user-select:none;}
+  .slot.new{animation:enter 0.4s ease;}
+  @keyframes enter{ from{ transform:translateY(-8px); opacity:0; } to{ transform:translateY(0); opacity:1; } }
+  .slot .num{font-family:var(--font-data); color:var(--muted); font-size:15px;}
+  .slot .name{font-family:var(--font-display); font-size:19px;}
+  .slot .code{font-family:var(--font-data); color:var(--muted); font-size:12.5px; margin-top:2px;}
+  .slot .time{font-family:var(--font-data); color:var(--muted); font-size:12.5px; white-space:nowrap;}
+  .slot.empty{color:var(--line); border-style:dashed; background:transparent;}
+  .slot.empty .name{color:var(--muted); font-family:var(--font-ui); font-size:14px;}
+  table{width:100%; border-collapse:collapse; font-size:13.5px;}
+  th,td{text-align:left; padding:9px 8px; border-bottom:1px solid var(--line);}
+  th{color:var(--muted); font-weight:normal; font-size:12.5px;}
+  td input, td select{width:100%; border:1px solid transparent; background:transparent; padding:5px 6px; border-radius:6px; font-size:13.5px; font-family:inherit;}
+  td select[multiple]{min-height:90px;}
+  td input:focus, td select:focus{border-color:var(--line); background:#fff; outline:none;}
+  .row-del{border:none; background:transparent; color:var(--bad); cursor:pointer; font-size:13px;}
+  textarea{width:100%; min-height:90px; border:1px solid var(--line); border-radius:8px; padding:10px; font-family:var(--font-data); font-size:12.5px; resize:vertical;}
+  .roster-actions{display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; align-items:center;}
+  .save-note{font-size:12.5px; color:var(--muted); margin-top:10px; min-height:16px;}
+  .table-scroll{overflow-x:auto;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="setup-banner" id="setupBanner">
+    <strong>Setup needed:</strong> open this file in a text editor, find the
+    <code>firebaseConfig</code> object near the top of the script, and paste in your
+    own Firebase project's config (from the Firebase console).
+  </div>
+
+  <div class="top">
+    <div class="wordmark">Admin Console<span>Diamond International School</span></div>
+    <div class="tabs">
+      <button class="tab active" data-view="scan">Scan station</button>
+      <button class="tab" data-view="eyp">EYP display</button>
+      <button class="tab" data-view="pyp">PYP display</button>
+      <button class="tab" data-view="students">Students</button>
+      <button class="tab" data-view="cards">Cards</button>
+      <button class="tab" data-view="records">Records</button>
+    </div>
+  </div>
+
+  <div class="view active" id="view-scan">
+    <div class="scan-grid">
+      <div class="card">
+        <h2>Scan a card</h2>
+        <p class="hint">Scan a guardian's pickup card with a USB/Bluetooth scanner (types the code + presses enter), or type a code and press enter. A card can list one student or several siblings — all of them check in together.</p>
+        <input class="scan-input" id="scanInput" placeholder="Waiting for a scan…" autocomplete="off" autofocus>
+        <div class="feedback idle" id="feedback">No scans yet this session.</div>
+        <div class="camera-row">
+          <button class="btn" id="camBtn">Try camera scan</button>
+          <span class="cam-note" id="camNote">Uses your device camera to read a barcode or QR code.</span>
+        </div>
+        <video class="cam" id="camVideo" muted playsinline></video>
+      </div>
+      <div class="card">
+        <div class="mini-title"><h3>EYP queue</h3><span class="pill eyp">EYP</span></div>
+        <ul class="mini-list" id="miniEyp"></ul>
+        <div class="mini-title"><h3>PYP queue</h3><span class="pill pyp">PYP</span></div>
+        <ul class="mini-list" id="miniPyp"></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="view" id="view-eyp">
+    <div class="board">
+      <div class="board-head eyp">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+          <div><h1>Early Years Programme</h1><p>Last 10 check-ins, most recent first · swipe a row left to remove it</p></div>
+          <button class="btn" id="clearEypBtn" style="background:rgba(255,255,255,0.15); border-color:rgba(255,255,255,0.4); color:#fff;">Clear queue</button>
+        </div>
+      </div>
+      <div class="slots" id="boardEyp"></div>
+    </div>
+  </div>
+
+  <div class="view" id="view-pyp">
+    <div class="board">
+      <div class="board-head pyp">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+          <div><h1>Primary Years Programme</h1><p>Last 10 check-ins, most recent first · swipe a row left to remove it</p></div>
+          <button class="btn" id="clearPypBtn" style="background:rgba(255,255,255,0.15); border-color:rgba(255,255,255,0.4); color:#fff;">Clear queue</button>
+        </div>
+      </div>
+      <div class="slots" id="boardPyp"></div>
+    </div>
+  </div>
+
+  <div class="view" id="view-students">
+    <div class="card">
+      <h2>Students</h2>
+      <p class="hint">Each student just needs a name and grade — the programme (EYP/PYP) is set automatically. Students don't have their own scan code anymore; a pickup card (next tab) is what gets scanned.</p>
+      <div class="table-scroll">
+      <table id="studentsTable">
+        <thead><tr><th style="width:40%">Name</th><th style="width:25%">Grade</th><th style="width:15%">Programme</th><th></th></tr></thead>
+        <tbody id="studentsBody"></tbody>
+      </table>
+      </div>
+      <div class="roster-actions">
+        <button class="btn" id="addStudentBtn">Add student</button>
+        <button class="btn primary" id="saveStudentsBtn">Save students</button>
+        <button class="btn danger" id="deleteStudentsBtn">Delete all students</button>
+      </div>
+      <div class="save-note" id="studentsNote"></div>
+    </div>
+    <div class="card" style="margin-top:16px;">
+      <h2>Bulk add students</h2>
+      <p class="hint">One student per line: name, grade (Nursery, PreS, Pre-K, Kinder, G1, G2, G3, G4, G5).</p>
+      <textarea id="bulkStudentText" placeholder="Nari Souvannavong, Pre-K&#10;Ben Xiong, G3"></textarea>
+      <div class="roster-actions"><button class="btn" id="bulkStudentBtn">Add these rows</button></div>
+    </div>
+  </div>
+
+  <div class="view" id="view-cards">
+    <div class="card">
+      <h2>Pickup cards</h2>
+      <p class="hint">Each card is what actually gets scanned. Give it a code, the guardian's name, and pick the student(s) it covers — hold Ctrl/Cmd to select more than one for siblings. If a card is lost, just remove it here; the student's record is untouched, and you can add them a new card.</p>
+      <div class="table-scroll">
+      <table id="cardsTable">
+        <thead><tr><th style="width:20%">Code</th><th style="width:25%">Guardian</th><th style="width:40%">Student(s)</th><th></th></tr></thead>
+        <tbody id="cardsBody"></tbody>
+      </table>
+      </div>
+      <div class="roster-actions">
+        <button class="btn" id="addCardBtn">Add card</button>
+        <button class="btn primary" id="saveCardsBtn">Save cards</button>
+        <button class="btn danger" id="deleteCardsBtn">Delete all cards</button>
+      </div>
+      <div class="save-note" id="cardsNote"></div>
+    </div>
+    <div class="card" style="margin-top:16px;">
+      <h2>Bulk add cards</h2>
+      <p class="hint">One card per line: code, guardian, student name(s) separated by semicolons (names must exactly match the Students list).</p>
+      <textarea id="bulkCardText" placeholder="FAM001, Mrs. Souvannavong, Nari Souvannavong; Somchai Souvannavong&#10;FAM002, Mr. Xiong, Ben Xiong"></textarea>
+      <div class="roster-actions"><button class="btn" id="bulkCardBtn">Add these rows</button></div>
+    </div>
+  </div>
+
+  <div class="view" id="view-records">
+    <div class="card">
+      <h2>Scan records</h2>
+      <p class="hint">Every successful check-in is logged here by month, including who was checked in, when, and which guardian's card was used.</p>
+      <div class="roster-actions">
+        <input type="month" id="recordMonth" class="btn" style="cursor:auto;">
+        <button class="btn" id="loadRecordsBtn">Load</button>
+        <button class="btn" id="exportRecordsBtn">Export CSV</button>
+        <span class="save-note" id="recordCount" style="margin:0;"></span>
+      </div>
+      <div class="table-scroll" style="margin-top:14px;">
+      <table id="recordsTable">
+        <thead><tr><th>Date</th><th>Time</th><th>Name</th><th>Grade</th><th>Programme</th><th>Guardian</th><th>Card</th></tr></thead>
+        <tbody id="recordsBody"></tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+  // ====== SETUP: paste your Firebase project config below ======
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+  import { getDatabase, ref, onValue, set, push, get } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBFSb5_rV1lASv25jq8AWy1rXARUqEswtU",
+    authDomain: "dis-checkin.firebaseapp.com",
+    databaseURL: "https://dis-checkin-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "dis-checkin",
+    storageBucket: "dis-checkin.firebasestorage.app",
+    messagingSenderId: "360178071489",
+    appId: "1:360178071489:web:be44f3db8e2b6389172140"
+  };
+  // ================================================================
+
+  if(firebaseConfig.apiKey.indexOf('PASTE_') === 0){
+    document.getElementById('setupBanner').style.display = 'block';
+  }
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  window.CheckinDB = {
+    onStudents(cb){ onValue(ref(db, 'students'), snap=>{ const v=snap.val()||{}; cb(Object.entries(v).map(([id,d])=>({id, name:d.name||'', grade:d.grade||'Nursery'}))); }); },
+    onCards(cb){ onValue(ref(db, 'cards'), snap=>{ const v=snap.val()||{}; cb(Object.entries(v).map(([code,d])=>({code, guardian:d.guardian||'', studentIds:d.studentIds||[]}))); }); },
+    onQueues(cb){ onValue(ref(db, 'queues'), snap => cb(snap.val() || {EYP:[], PYP:[]})); },
+    saveStudents(arr){
+      const obj = {}; arr.forEach(s=>{ if(s.id) obj[s.id] = {name:s.name||'', grade:s.grade||'Nursery'}; });
+      return set(ref(db, 'students'), obj);
+    },
+    saveCards(arr){
+      const obj = {}; arr.forEach(c=>{ if(c.code) obj[c.code] = {guardian:c.guardian||'', studentIds:c.studentIds||[]}; });
+      return set(ref(db, 'cards'), obj);
+    },
+    saveQueue(program, list){ return set(ref(db, 'queues/' + program), list); },
+    logScan(entry, program){
+      const now = new Date();
+      const monthKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+      const r = push(ref(db, 'scanLog/' + monthKey));
+      return set(r, {
+        studentId: entry.studentId, name: entry.name, grade: entry.grade, program,
+        guardian: entry.guardian || '', code: entry.code || '',
+        date: now.toLocaleDateString(), time: entry.time, ts: now.getTime()
+      });
+    },
+    async getMonthLog(monthKey){
+      const snap = await get(ref(db, 'scanLog/' + monthKey));
+      const v = snap.val() || {};
+      return Object.values(v).sort((a,b)=>(b.ts||0)-(a.ts||0));
+    }
+  };
+</script>
+
+<script>
+(function(){
+  const GRADE_LIST = ['Nursery','PreS','Pre-K','Kinder','G1','G2','G3','G4','G5'];
+  const PYP_GRADES = new Set(['Kinder','G1','G2','G3','G4','G5']);
+  function programForGrade(grade){ return PYP_GRADES.has(grade) ? 'PYP' : 'EYP'; }
+  function genId(){ return 's' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+  function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  let students = [];
+  let cards = [];
+  let queues = {EYP:[], PYP:[]};
+
+  function whenReady(fn){
+    if(window.CheckinDB){ fn(); } else { setTimeout(()=>whenReady(fn), 50); }
+  }
+
+  whenReady(()=>{
+    window.CheckinDB.onStudents(data=>{ students = data; renderStudentsTable(); renderCardsTable(); });
+    window.CheckinDB.onCards(data=>{ cards = data; renderCardsTable(); });
+    window.CheckinDB.onQueues(data=>{
+      const newQueues = { EYP: (data.EYP||[]).filter(Boolean), PYP: (data.PYP||[]).filter(Boolean) };
+      const newEypTop = newQueues.EYP[0] ? (newQueues.EYP[0].studentId + '|' + newQueues.EYP[0].time) : null;
+      const newPypTop = newQueues.PYP[0] ? (newQueues.PYP[0].studentId + '|' + newQueues.PYP[0].time) : null;
+      if(!eypInit){ eypInit = true; }
+      else if(newEypTop && newEypTop !== lastEypTop && isViewActive('eyp')){ playBell('EYP'); }
+      if(!pypInit){ pypInit = true; }
+      else if(newPypTop && newPypTop !== lastPypTop && isViewActive('pyp')){ playBell('PYP'); }
+      lastEypTop = newEypTop; lastPypTop = newPypTop;
+      queues = newQueues;
+      renderQueues();
+    });
+  });
+
+  // ---------- audio ----------
+  let audioCtx = null;
+  function ensureAudio(){
+    try{
+      if(!audioCtx){ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      if(audioCtx.state === 'suspended'){ audioCtx.resume(); }
+    }catch(e){}
+  }
+  function playTone(freq, duration, delayMs){
+    if(!audioCtx) return;
+    try{
+      const startTime = audioCtx.currentTime + (delayMs||0)/1000;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      gain.gain.value = 1.0;
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(startTime);
+      gain.gain.setValueAtTime(1.0, startTime + (duration/1000)*0.6);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration/1000);
+      osc.stop(startTime + duration/1000 + 0.02);
+    }catch(e){}
+  }
+  function playChime(program){
+    if(program === 'PYP'){ playTone(660,160,0); playTone(990,200,170); }
+    else { playTone(523,160,0); playTone(784,200,170); }
+  }
+  function playBell(program){
+    const base = program === 'PYP' ? 880 : 660;
+    playBellTone(base, 550); playBellTone(base*2, 450);
+  }
+  function playBellTone(freq, duration){
+    if(!audioCtx) return;
+    try{
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      gain.gain.value = 1.0;
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start();
+      gain.gain.setValueAtTime(1.0, audioCtx.currentTime + (duration/1000)*0.6);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration/1000);
+      osc.stop(audioCtx.currentTime + duration/1000);
+    }catch(e){}
+  }
+  function isViewActive(view){
+    const el = document.getElementById('view-' + view);
+    return el && el.classList.contains('active');
+  }
+  let lastEypTop = null, lastPypTop = null, eypInit = false, pypInit = false;
+
+  // ---------- check-in ----------
+  async function checkInCard(rawCode){
+    const code = (rawCode||'').trim();
+    if(!code) return {ok:false};
+    const cardEntry = cards.find(c => c.code.trim().toLowerCase() === code.toLowerCase());
+    if(!cardEntry) return {ok:false, notFound:true, code:code};
+
+    const results = [];
+    for(const studentId of (cardEntry.studentIds || [])){
+      const student = students.find(s => s.id === studentId);
+      if(!student) continue;
+      const program = programForGrade(student.grade);
+      const alreadyIn = (queues[program]||[]).some(e => e.studentId === studentId);
+      if(alreadyIn){
+        results.push({ok:false, duplicate:true, name:student.name, grade:student.grade, program:program});
+        continue;
+      }
+      const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+      const entry = {studentId:studentId, code:cardEntry.code, name:student.name, grade:student.grade, guardian:cardEntry.guardian||'', time:time};
+      const newQueue = [entry, ...(queues[program]||[])].slice(0,10);
+      await window.CheckinDB.saveQueue(program, newQueue);
+      queues[program] = newQueue;
+      await window.CheckinDB.logScan(entry, program);
+      results.push({ok:true, name:student.name, grade:student.grade, program:program, time:time});
+    }
+    return {ok:true, guardian:cardEntry.guardian, results:results};
+  }
+
+  function handleScan(rawCode){
+    const code = (rawCode||'').trim(); if(!code) return;
+    const fb = document.getElementById('feedback');
+    checkInCard(code).then(res=>{
+      if(!res.ok){
+        fb.className = 'feedback bad';
+        fb.innerHTML = `<div><div class="fb-name">Card not found</div><div class="fb-sub">"${escapeHtml(code)}" isn't linked to any student — add it under Cards.</div></div>`;
+        return;
+      }
+      if(!res.results.length){
+        fb.className = 'feedback bad';
+        fb.innerHTML = `<div><div class="fb-name">${escapeHtml(res.guardian||'Card')}</div><div class="fb-sub">This card has no valid students linked to it.</div></div>`;
+        return;
+      }
+      res.results.forEach((r,i)=>{ if(r.ok) setTimeout(()=>playChime(r.program), i*180); });
+      const lines = res.results.map(r=>{
+        if(r.ok) return `<div><strong>${escapeHtml(r.name)}</strong> — ${escapeHtml(r.grade||'')} (${r.program}) checked in</div>`;
+        return `<div><strong>${escapeHtml(r.name)}</strong> — already in the ${escapeHtml(r.program)} queue</div>`;
+      }).join('');
+      const anyOk = res.results.some(r=>r.ok);
+      fb.className = 'feedback ' + (anyOk ? 'ok' : 'idle');
+      fb.innerHTML = `<div><div class="fb-name">${escapeHtml(res.guardian||'Card')}</div><div class="fb-lines">${lines}</div></div>`;
+    }).catch(err=>{
+      fb.className = 'feedback bad';
+      fb.innerHTML = `<div><div class="fb-name">Couldn't save</div><div class="fb-sub">${escapeHtml(String(err))}</div></div>`;
+    });
+  }
+
+  // ---------- rendering: queues ----------
+  function renderQueues(){
+    renderBoard('boardEyp', queues.EYP, 'EYP'); renderBoard('boardPyp', queues.PYP, 'PYP');
+    renderMini('miniEyp', queues.EYP); renderMini('miniPyp', queues.PYP);
+  }
+
+  function renderBoard(id, list, program){
+    const el = document.getElementById(id); el.innerHTML = '';
+    for(let i=0;i<10;i++){
+      const item = list[i];
+      const wrap = document.createElement('div');
+      wrap.className = 'slot-wrap';
+      if(item){
+        wrap.innerHTML = `
+          <div class="slot-remove"><button class="remove-slot-btn" data-program="${program}" data-idx="${i}">Remove</button></div>
+          <div class="slot${i===0?' new':''}" data-program="${program}" data-idx="${i}">
+            <div class="num">${i+1}</div>
+            <div><div class="name">${escapeHtml(item.name)}</div><div class="code">${escapeHtml(item.grade||'')} · ${escapeHtml(item.guardian||'')}</div></div>
+            <div class="time">${escapeHtml(item.time)}</div>
+          </div>`;
+      } else {
+        wrap.innerHTML = `<div class="slot empty"><div class="num">${i+1}</div><div class="name">—</div><div></div></div>`;
+      }
+      el.appendChild(wrap);
+    }
+  }
+
+  function renderMini(id, list){
+    const el = document.getElementById(id); el.innerHTML = '';
+    if(!list.length){ el.innerHTML = '<li class="empty-row">No check-ins yet.</li>'; return; }
+    list.slice(0,5).forEach(item=>{
+      const li = document.createElement('li');
+      li.innerHTML = `<span>${escapeHtml(item.name)} <span class="code">${escapeHtml(item.grade||'')}</span></span><span class="code">${escapeHtml(item.time)}</span>`;
+      el.appendChild(li);
+    });
+  }
+
+  // swipe-to-reveal remove, via pointer events (works for touch and mouse)
+  function setupSwipe(containerId){
+    const container = document.getElementById(containerId);
+    let dragState = null;
+    let revealedSlot = null;
+
+    function resetRevealed(){
+      if(revealedSlot){ revealedSlot.style.transform = 'translateX(0)'; revealedSlot = null; }
+    }
+
+    container.addEventListener('pointerdown', e=>{
+      const slot = e.target.closest('.slot');
+      if(!slot || slot.classList.contains('empty')){ resetRevealed(); return; }
+      if(revealedSlot && revealedSlot !== slot){ resetRevealed(); }
+      dragState = { slot:slot, startX:e.clientX };
+      try{ slot.setPointerCapture(e.pointerId); }catch(err){}
+    });
+    container.addEventListener('pointermove', e=>{
+      if(!dragState) return;
+      const dx = e.clientX - dragState.startX;
+      const clamped = Math.max(-90, Math.min(0, dx));
+      dragState.slot.style.transform = `translateX(${clamped}px)`;
+    });
+    function endDrag(e){
+      if(!dragState) return;
+      const dx = e.clientX - dragState.startX;
+      if(dx < -45){
+        dragState.slot.style.transform = 'translateX(-90px)';
+        revealedSlot = dragState.slot;
+      } else {
+        dragState.slot.style.transform = 'translateX(0)';
+        if(revealedSlot === dragState.slot) revealedSlot = null;
+      }
+      dragState = null;
+    }
+    container.addEventListener('pointerup', endDrag);
+    container.addEventListener('pointercancel', endDrag);
+
+    container.addEventListener('click', e=>{
+      const btn = e.target.closest('.remove-slot-btn');
+      if(!btn) return;
+      const program = btn.getAttribute('data-program');
+      const idx = parseInt(btn.getAttribute('data-idx'), 10);
+      const newList = (queues[program]||[]).slice();
+      newList.splice(idx, 1);
+      window.CheckinDB.saveQueue(program, newList);
+      queues[program] = newList;
+      revealedSlot = null;
+    });
+  }
+  setupSwipe('boardEyp');
+  setupSwipe('boardPyp');
+
+  document.getElementById('clearEypBtn').addEventListener('click', ()=>{
+    if(confirm('Are you sure you want to clear the EYP queue? This can\'t be undone.')){ window.CheckinDB.saveQueue('EYP', []); }
+  });
+  document.getElementById('clearPypBtn').addEventListener('click', ()=>{
+    if(confirm('Are you sure you want to clear the PYP queue? This can\'t be undone.')){ window.CheckinDB.saveQueue('PYP', []); }
+  });
+
+  // ---------- rendering: students ----------
+  function renderStudentsTable(){
+    const body = document.getElementById('studentsBody'); body.innerHTML = '';
+    students.forEach((s, idx)=>{
+      const tr = document.createElement('tr');
+      const gradeOptions = GRADE_LIST.map(g=>`<option value="${g}" ${s.grade===g?'selected':''}>${g}</option>`).join('');
+      const program = programForGrade(s.grade);
+      tr.innerHTML = `
+        <td><input type="text" data-idx="${idx}" data-field="name" value="${escapeHtml(s.name)}"></td>
+        <td><select data-idx="${idx}" data-field="grade">${gradeOptions}</select></td>
+        <td><span class="pill ${program==='PYP'?'pyp':'eyp'}">${program}</span></td>
+        <td><button class="row-del" data-idx="${idx}">Remove</button></td>`;
+      body.appendChild(tr);
+    });
+  }
+  document.getElementById('studentsBody').addEventListener('input', e=>{
+    const idx=e.target.getAttribute('data-idx'), field=e.target.getAttribute('data-field');
+    if(idx===null) return; students[idx][field]=e.target.value;
+  });
+  document.getElementById('studentsBody').addEventListener('change', e=>{
+    const idx=e.target.getAttribute('data-idx'), field=e.target.getAttribute('data-field');
+    if(idx===null) return; students[idx][field]=e.target.value;
+    if(field==='grade'){ renderStudentsTable(); renderCardsTable(); }
+  });
+  document.getElementById('studentsBody').addEventListener('click', e=>{
+    if(e.target.classList.contains('row-del')){ students.splice(e.target.getAttribute('data-idx'),1); renderStudentsTable(); renderCardsTable(); }
+  });
+  document.getElementById('addStudentBtn').addEventListener('click', ()=>{
+    students.push({id:genId(), name:'', grade:'Nursery'}); renderStudentsTable(); renderCardsTable();
+  });
+  document.getElementById('saveStudentsBtn').addEventListener('click', ()=>{
+    const note=document.getElementById('studentsNote'); note.textContent='Saving…';
+    window.CheckinDB.saveStudents(students).then(()=>{ note.textContent='Saved.'; setTimeout(()=>{note.textContent='';},1800); })
+      .catch(err=>{ note.textContent='Save failed — '+err; });
+  });
+  document.getElementById('deleteStudentsBtn').addEventListener('click', ()=>{
+    if(confirm('Delete ALL students? This can\'t be undone (existing cards will keep pointing at students that no longer exist).')){
+      students = []; renderStudentsTable(); renderCardsTable();
+      const note=document.getElementById('studentsNote'); note.textContent='Deleting…';
+      window.CheckinDB.saveStudents([]).then(()=>{ note.textContent='All students deleted.'; setTimeout(()=>{note.textContent='';},1800); });
+    }
+  });
+  document.getElementById('bulkStudentBtn').addEventListener('click', ()=>{
+    const lines = document.getElementById('bulkStudentText').value.split('\n').map(l=>l.trim()).filter(Boolean);
+    lines.forEach(line=>{
+      const parts = line.split(',').map(p=>p.trim());
+      if(parts.length>=1 && parts[0]){
+        const match = GRADE_LIST.find(g=>g.toLowerCase()===(parts[1]||'').toLowerCase());
+        students.push({id:genId(), name:parts[0], grade:match||'Nursery'});
+      }
+    });
+    document.getElementById('bulkStudentText').value=''; renderStudentsTable(); renderCardsTable();
+  });
+
+  // ---------- rendering: cards ----------
+  function renderCardsTable(){
+    const body = document.getElementById('cardsBody'); body.innerHTML = '';
+    cards.forEach((c, idx)=>{
+      const tr = document.createElement('tr');
+      const options = students.map(s=>`<option value="${s.id}" ${(c.studentIds||[]).includes(s.id)?'selected':''}>${escapeHtml(s.name)} (${s.grade})</option>`).join('');
+      tr.innerHTML = `
+        <td><input type="text" data-idx="${idx}" data-field="code" value="${escapeHtml(c.code)}"></td>
+        <td><input type="text" data-idx="${idx}" data-field="guardian" value="${escapeHtml(c.guardian)}"></td>
+        <td><select multiple size="4" data-idx="${idx}" data-field="studentIds">${options}</select></td>
+        <td><button class="row-del" data-idx="${idx}">Remove</button></td>`;
+      body.appendChild(tr);
+    });
+  }
+  document.getElementById('cardsBody').addEventListener('input', e=>{
+    const idx=e.target.getAttribute('data-idx'), field=e.target.getAttribute('data-field');
+    if(idx===null || field==='studentIds') return; cards[idx][field]=e.target.value;
+  });
+  document.getElementById('cardsBody').addEventListener('change', e=>{
+    const idx=e.target.getAttribute('data-idx'), field=e.target.getAttribute('data-field');
+    if(idx===null) return;
+    if(field==='studentIds'){
+      cards[idx].studentIds = Array.from(e.target.selectedOptions).map(o=>o.value);
+    } else {
+      cards[idx][field]=e.target.value;
+    }
+  });
+  document.getElementById('cardsBody').addEventListener('click', e=>{
+    if(e.target.classList.contains('row-del')){ cards.splice(e.target.getAttribute('data-idx'),1); renderCardsTable(); }
+  });
+  document.getElementById('addCardBtn').addEventListener('click', ()=>{
+    cards.push({code:'', guardian:'', studentIds:[]}); renderCardsTable();
+  });
+  document.getElementById('saveCardsBtn').addEventListener('click', ()=>{
+    const note=document.getElementById('cardsNote'); note.textContent='Saving…';
+    window.CheckinDB.saveCards(cards).then(()=>{ note.textContent='Saved.'; setTimeout(()=>{note.textContent='';},1800); })
+      .catch(err=>{ note.textContent='Save failed — '+err; });
+  });
+  document.getElementById('deleteCardsBtn').addEventListener('click', ()=>{
+    if(confirm('Delete ALL cards? This can\'t be undone.')){
+      cards = []; renderCardsTable();
+      const note=document.getElementById('cardsNote'); note.textContent='Deleting…';
+      window.CheckinDB.saveCards([]).then(()=>{ note.textContent='All cards deleted.'; setTimeout(()=>{note.textContent='';},1800); });
+    }
+  });
+  document.getElementById('bulkCardBtn').addEventListener('click', ()=>{
+    const lines = document.getElementById('bulkCardText').value.split('\n').map(l=>l.trim()).filter(Boolean);
+    lines.forEach(line=>{
+      const firstComma = line.indexOf(',');
+      const secondComma = line.indexOf(',', firstComma+1);
+      if(firstComma===-1 || secondComma===-1) return;
+      const code = line.slice(0, firstComma).trim();
+      const guardian = line.slice(firstComma+1, secondComma).trim();
+      const namesPart = line.slice(secondComma+1).trim();
+      const names = namesPart.split(';').map(n=>n.trim()).filter(Boolean);
+      const studentIds = names.map(n=>{
+        const match = students.find(s=>s.name.trim().toLowerCase()===n.toLowerCase());
+        return match ? match.id : null;
+      }).filter(Boolean);
+      if(code) cards.push({code, guardian, studentIds});
+    });
+    document.getElementById('bulkCardText').value=''; renderCardsTable();
+  });
+
+  // ---------- records ----------
+  const recordMonthInput = document.getElementById('recordMonth');
+  (function initMonth(){
+    const now = new Date();
+    recordMonthInput.value = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  })();
+  let currentRecords = [];
+  function loadRecords(){
+    const monthKey = recordMonthInput.value;
+    if(!monthKey) return;
+    document.getElementById('recordCount').textContent = 'Loading…';
+    window.CheckinDB.getMonthLog(monthKey).then(rows=>{
+      currentRecords = rows;
+      const body = document.getElementById('recordsBody'); body.innerHTML='';
+      rows.forEach(r=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.time)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.grade)}</td><td>${escapeHtml(r.program)}</td><td>${escapeHtml(r.guardian)}</td><td>${escapeHtml(r.code)}</td>`;
+        body.appendChild(tr);
+      });
+      document.getElementById('recordCount').textContent = rows.length + ' scan' + (rows.length===1?'':'s') + ' this month';
+    });
+  }
+  document.getElementById('loadRecordsBtn').addEventListener('click', loadRecords);
+  document.getElementById('exportRecordsBtn').addEventListener('click', ()=>{
+    if(!currentRecords.length){ loadRecords(); return; }
+    const header = ['Date','Time','Name','Grade','Programme','Guardian','Card'];
+    const rows = currentRecords.map(r=>[r.date,r.time,r.name,r.grade,r.program,r.guardian,r.code]);
+    const csv = [header, ...rows].map(row=>row.map(v=>`"${(v||'').toString().replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'checkin-records-' + recordMonthInput.value + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+  document.querySelectorAll('.tab').forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      if(tab.dataset.view === 'records') loadRecords();
+    });
+  });
+
+  // ---------- scan input + tabs ----------
+  const scanInput = document.getElementById('scanInput');
+  scanInput.addEventListener('keydown', e=>{ ensureAudio(); if(e.key==='Enter'){ handleScan(scanInput.value); scanInput.value=''; } });
+  document.addEventListener('click', (e)=>{
+    const activeView = document.querySelector('.view.active');
+    if(activeView && activeView.id==='view-scan' && !e.target.closest('input, select, textarea, button')){ scanInput.focus(); }
+  });
+
+  document.querySelectorAll('.tab').forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      ensureAudio();
+      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+      document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('view-' + tab.dataset.view).classList.add('active');
+      if(tab.dataset.view === 'scan'){ scanInput.focus(); }
+    });
+  });
+
+  // ---------- camera ----------
+  let codeReader = null, scanning = false, lastValue = null, missCount = 0;
+  const MISS_THRESHOLD = 5;
+
+  function stopCamera(){
+    const video = document.getElementById('camVideo'), btn = document.getElementById('camBtn');
+    if(codeReader){ codeReader.reset(); codeReader = null; }
+    video.style.display = 'none';
+    btn.textContent = 'Try camera scan';
+    scanning = false; lastValue = null; missCount = 0;
+  }
+
+  document.getElementById('camBtn').addEventListener('click', async ()=>{
+    const video = document.getElementById('camVideo'), note = document.getElementById('camNote'), btn = document.getElementById('camBtn');
+    ensureAudio();
+    if(scanning){ stopCamera(); return; }
+    try{
+      if(typeof ZXing === 'undefined') throw new Error('Scanner library unavailable');
+      codeReader = new ZXing.BrowserMultiFormatReader();
+      video.style.display = 'block';
+      scanning = true;
+      btn.textContent = 'Stop camera scan';
+      note.textContent = 'Point a barcode or QR code at the camera.';
+      await codeReader.decodeFromConstraints(
+        { video: { facingMode: 'environment' } },
+        video,
+        (result) => {
+          if(result){
+            missCount = 0;
+            const value = result.getText();
+            if(value !== lastValue){ lastValue = value; handleScan(value); }
+          } else {
+            missCount++;
+            if(missCount > MISS_THRESHOLD){ lastValue = null; }
+          }
+        }
+      );
+    }catch(err){
+      note.textContent = 'Camera permission was blocked or unavailable. Use a USB/Bluetooth scanner or manual entry instead.';
+      video.style.display = 'none'; scanning = false; btn.textContent = 'Try camera scan';
+    }
+  });
+})();
+</script>
+</body>
+</html>
