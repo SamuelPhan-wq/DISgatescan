@@ -160,7 +160,7 @@
       <p class="hint">Each student just needs a name and grade — the programme (EYP/PYP) is set automatically. Students don't have their own scan code anymore; a pickup card (next tab) is what gets scanned.</p>
       <div class="table-scroll">
       <table id="studentsTable">
-        <thead><tr><th style="width:15%">ID</th><th style="width:35%">Name</th><th style="width:20%">Grade</th><th style="width:15%">Programme</th><th></th></tr></thead>
+        <thead><tr><th style="width:35%">Name</th><th style="width:15%">ID</th><th style="width:20%">Grade</th><th style="width:15%">Programme</th><th></th></tr></thead>
         <tbody id="studentsBody"></tbody>
       </table>
       </div>
@@ -173,8 +173,8 @@
     </div>
     <div class="card" style="margin-top:16px;">
       <h2>Bulk add students</h2>
-      <p class="hint">One student per line: ID, name, grade (Nursery, PreS, Pre-K, Kinder, G1, G2, G3, G4, G5). The ID can be anything unique — a student number works well.</p>
-      <textarea id="bulkStudentText" placeholder="ST1042, Nari Souvannavong, Pre-K&#10;ST1043, Ben Xiong, G3"></textarea>
+      <p class="hint">One student per line: name, ID, grade (Nursery, PreS, Pre-K, Kinder, G1, G2, G3, G4, G5). The ID can be anything unique — a student number works well.</p>
+      <textarea id="bulkStudentText" placeholder="Nari Souvannavong, ST1042, Pre-K&#10;Ben Xiong, ST1043, G3"></textarea>
       <div class="roster-actions"><button class="btn" id="bulkStudentBtn">Add these rows</button></div>
     </div>
   </div>
@@ -548,8 +548,8 @@
       const gradeOptions = GRADE_LIST.map(g=>`<option value="${g}" ${s.grade===g?'selected':''}>${g}</option>`).join('');
       const program = programForGrade(s.grade);
       tr.innerHTML = `
-        <td><input type="text" data-idx="${idx}" data-field="code" value="${escapeHtml(s.code)}"></td>
         <td><input type="text" data-idx="${idx}" data-field="name" value="${escapeHtml(s.name)}"></td>
+        <td><input type="text" data-idx="${idx}" data-field="code" value="${escapeHtml(s.code)}"></td>
         <td><select data-idx="${idx}" data-field="grade">${gradeOptions}</select></td>
         <td><span class="pill ${program==='PYP'?'pyp':'eyp'}">${program}</span></td>
         <td><button class="row-del" data-idx="${idx}">Remove</button></td>`;
@@ -589,7 +589,7 @@
       const parts = line.split(',').map(p=>p.trim());
       if(!parts.length) return;
       let code='', name='', gradeRaw='';
-      if(parts.length>=3){ [code, name, gradeRaw] = parts; }
+      if(parts.length>=3){ [name, code, gradeRaw] = parts; }
       else { [name, gradeRaw] = parts; }
       if(!name) return;
       const match = GRADE_LIST.find(g=>g.toLowerCase()===(gradeRaw||'').toLowerCase());
