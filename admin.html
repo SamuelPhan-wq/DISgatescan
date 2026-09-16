@@ -161,7 +161,7 @@
       <p class="hint">Each student just needs a name and grade — the programme (EYP/PYP) is set automatically. Students don't have their own scan code anymore; a pickup card (next tab) is what gets scanned.</p>
       <div class="table-scroll">
       <table id="studentsTable">
-        <thead><tr><th style="width:40%">Name</th><th style="width:25%">Grade</th><th style="width:15%">Programme</th><th></th></tr></thead>
+        <thead><tr><th style="width:15%">ID</th><th style="width:35%">Name</th><th style="width:20%">Grade</th><th style="width:15%">Programme</th><th></th></tr></thead>
         <tbody id="studentsBody"></tbody>
       </table>
       </div>
@@ -174,8 +174,8 @@
     </div>
     <div class="card" style="margin-top:16px;">
       <h2>Bulk add students</h2>
-      <p class="hint">One student per line: name, grade (Nursery, PreS, Pre-K, Kinder, G1, G2, G3, G4, G5).</p>
-      <textarea id="bulkStudentText" placeholder="Nari Souvannavong, Pre-K&#10;Ben Xiong, G3"></textarea>
+      <p class="hint">One student per line: ID, name, grade (Nursery, PreS, Pre-K, Kinder, G1, G2, G3, G4, G5). The ID can be anything unique — a student number works well.</p>
+      <textarea id="bulkStudentText" placeholder="ST1042, Nari Souvannavong, Pre-K&#10;ST1043, Ben Xiong, G3"></textarea>
       <div class="roster-actions"><button class="btn" id="bulkStudentBtn">Add these rows</button></div>
     </div>
   </div>
@@ -213,6 +213,7 @@
         <input type="month" id="recordMonth" class="btn" style="cursor:auto;">
         <button class="btn" id="loadRecordsBtn">Load</button>
         <button class="btn" id="exportRecordsBtn">Export CSV</button>
+        <button class="btn danger" id="deleteRecordsBtn">Delete this month's records</button>
         <span class="save-note" id="recordCount" style="margin:0;"></span>
       </div>
       <div class="roster-actions" style="margin-top:2px;">
@@ -243,7 +244,7 @@
 <script type="module">
   // ====== SETUP: paste your Firebase project config below ======
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-  import { getDatabase, ref, onValue, set, push, get } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
+  import { getDatabase, ref, onValue, set, push, get, remove } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyBFSb5_rV1lASv25jq8AWy1rXARUqEswtU",
@@ -264,11 +265,11 @@
   const db = getDatabase(app);
 
   window.CheckinDB = {
-    onStudents(cb){ onValue(ref(db, 'students'), snap=>{ const v=snap.val()||{}; cb(Object.entries(v).map(([id,d])=>({id, name:d.name||'', grade:d.grade||'Nursery'}))); }); },
+    onStudents(cb){ onValue(ref(db, 'students'), snap=>{ const v=snap.val()||{}; cb(Object.entries(v).map(([id,d])=>({id, code:d.code||'', name:d.name||'', grade:d.grade||'Nursery'}))); }); },
     onCards(cb){ onValue(ref(db, 'cards'), snap=>{ const v=snap.val()||{}; cb(Object.entries(v).map(([code,d])=>({code, guardian:d.guardian||'', studentIds:d.studentIds||[]}))); }); },
     onQueues(cb){ onValue(ref(db, 'queues'), snap => cb(snap.val() || {EYP:[], PYP:[]})); },
     saveStudents(arr){
-      const obj = {}; arr.forEach(s=>{ if(s.id) obj[s.id] = {name:s.name||'', grade:s.grade||'Nursery'}; });
+      const obj = {}; arr.forEach(s=>{ if(s.id) obj[s.id] = {code:s.code||'', name:s.name||'', grade:s.grade||'Nursery'}; });
       return set(ref(db, 'students'), obj);
     },
     saveCards(arr){
@@ -290,7 +291,8 @@
       const snap = await get(ref(db, 'scanLog/' + monthKey));
       const v = snap.val() || {};
       return Object.values(v).sort((a,b)=>(b.ts||0)-(a.ts||0));
-    }
+    },
+    deleteMonthLog(monthKey){ return remove(ref(db, 'scanLog/' + monthKey)); }
   };
 </script>
 
@@ -542,6 +544,7 @@
       const gradeOptions = GRADE_LIST.map(g=>`<option value="${g}" ${s.grade===g?'selected':''}>${g}</option>`).join('');
       const program = programForGrade(s.grade);
       tr.innerHTML = `
+        <td><input type="text" data-idx="${idx}" data-field="code" value="${escapeHtml(s.code)}"></td>
         <td><input type="text" data-idx="${idx}" data-field="name" value="${escapeHtml(s.name)}"></td>
         <td><select data-idx="${idx}" data-field="grade">${gradeOptions}</select></td>
         <td><span class="pill ${program==='PYP'?'pyp':'eyp'}">${program}</span></td>
@@ -562,7 +565,7 @@
     if(e.target.classList.contains('row-del')){ students.splice(e.target.getAttribute('data-idx'),1); renderStudentsTable(); renderCardsTable(); }
   });
   document.getElementById('addStudentBtn').addEventListener('click', ()=>{
-    students.push({id:genId(), name:'', grade:'Nursery'}); renderStudentsTable(); renderCardsTable();
+    students.push({id:genId(), code:'', name:'', grade:'Nursery'}); renderStudentsTable(); renderCardsTable();
   });
   document.getElementById('saveStudentsBtn').addEventListener('click', ()=>{
     const note=document.getElementById('studentsNote'); note.textContent='Saving…';
@@ -580,10 +583,13 @@
     const lines = document.getElementById('bulkStudentText').value.split('\n').map(l=>l.trim()).filter(Boolean);
     lines.forEach(line=>{
       const parts = line.split(',').map(p=>p.trim());
-      if(parts.length>=1 && parts[0]){
-        const match = GRADE_LIST.find(g=>g.toLowerCase()===(parts[1]||'').toLowerCase());
-        students.push({id:genId(), name:parts[0], grade:match||'Nursery'});
-      }
+      if(!parts.length) return;
+      let code='', name='', gradeRaw='';
+      if(parts.length>=3){ [code, name, gradeRaw] = parts; }
+      else { [name, gradeRaw] = parts; }
+      if(!name) return;
+      const match = GRADE_LIST.find(g=>g.toLowerCase()===(gradeRaw||'').toLowerCase());
+      students.push({id:genId(), code:code, name:name, grade:match||'Nursery'});
     });
     document.getElementById('bulkStudentText').value=''; renderStudentsTable(); renderCardsTable();
   });
@@ -593,7 +599,7 @@
     const body = document.getElementById('cardsBody'); body.innerHTML = '';
     cards.forEach((c, idx)=>{
       const tr = document.createElement('tr');
-      const options = students.map(s=>`<option value="${s.id}" ${(c.studentIds||[]).includes(s.id)?'selected':''}>${escapeHtml(s.name)} (${s.grade})</option>`).join('');
+      const options = students.map(s=>`<option value="${s.id}" ${(c.studentIds||[]).includes(s.id)?'selected':''}>${escapeHtml(s.name)} — ${escapeHtml(s.code||'no ID')} (${s.grade})</option>`).join('');
       tr.innerHTML = `
         <td><input type="text" data-idx="${idx}" data-field="code" value="${escapeHtml(c.code)}"></td>
         <td><input type="text" data-idx="${idx}" data-field="guardian" value="${escapeHtml(c.guardian)}"></td>
@@ -734,6 +740,20 @@
     a.href = url; a.download = 'checkin-' + recordsViewMode + '-' + recordMonthInput.value + '.csv';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  });
+  document.getElementById('deleteRecordsBtn').addEventListener('click', ()=>{
+    const monthKey = recordMonthInput.value;
+    if(!monthKey) return;
+    if(confirm('Delete ALL scan records for ' + monthKey + '? Make sure you\'ve exported a copy first — this can\'t be undone.')){
+      document.getElementById('recordCount').textContent = 'Deleting…';
+      window.CheckinDB.deleteMonthLog(monthKey).then(()=>{
+        currentRecords = [];
+        renderRecordsView();
+        document.getElementById('recordCount').textContent = 'Records for ' + monthKey + ' deleted.';
+      }).catch(err=>{
+        document.getElementById('recordCount').textContent = 'Delete failed — ' + err;
+      });
+    }
   });
   document.querySelectorAll('.tab').forEach(tab=>{
     tab.addEventListener('click', ()=>{
