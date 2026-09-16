@@ -78,7 +78,6 @@
   th,td{text-align:left; padding:9px 8px; border-bottom:1px solid var(--line);}
   th{color:var(--muted); font-weight:normal; font-size:12.5px;}
   td input, td select{width:100%; border:1px solid transparent; background:transparent; padding:5px 6px; border-radius:6px; font-size:13.5px; font-family:inherit;}
-  td select[multiple]{min-height:90px;}
   td input:focus, td select:focus{border-color:var(--line); background:#fff; outline:none;}
   .row-del{border:none; background:transparent; color:var(--bad); cursor:pointer; font-size:13px;}
   textarea{width:100%; min-height:90px; border:1px solid var(--line); border-radius:8px; padding:10px; font-family:var(--font-data); font-size:12.5px; resize:vertical;}
@@ -265,7 +264,12 @@
   const db = getDatabase(app);
 
   window.CheckinDB = {
-    onStudents(cb){ onValue(ref(db, 'students'), snap=>{ const v=snap.val()||{}; cb(Object.entries(v).map(([id,d])=>({id, code:d.code||'', name:d.name||'', grade:d.grade||'Nursery'}))); }); },
+    onStudents(cb){ onValue(ref(db, 'students'), snap=>{
+      const v=snap.val()||{};
+      const arr = Object.entries(v).map(([id,d])=>({id, code:d.code||'', name:d.name||'', grade:d.grade||'Nursery'}));
+      arr.sort((a,b)=> a.name.localeCompare(b.name));
+      cb(arr);
+    }); },
     onCards(cb){ onValue(ref(db, 'cards'), snap=>{ const v=snap.val()||{}; cb(Object.entries(v).map(([code,d])=>({code, guardian:d.guardian||'', studentIds:d.studentIds||[]}))); }); },
     onQueues(cb){ onValue(ref(db, 'queues'), snap => cb(snap.val() || {EYP:[], PYP:[]})); },
     saveStudents(arr){
@@ -599,27 +603,35 @@
     const body = document.getElementById('cardsBody'); body.innerHTML = '';
     cards.forEach((c, idx)=>{
       const tr = document.createElement('tr');
-      const options = students.map(s=>`<option value="${s.id}" ${(c.studentIds||[]).includes(s.id)?'selected':''}>${escapeHtml(s.name)} — ${escapeHtml(s.code||'no ID')} (${s.grade})</option>`).join('');
+      const options = students.map(s=>`
+        <label style="display:flex; align-items:center; gap:6px; font-size:12.5px; padding:3px 0;">
+          <input type="checkbox" data-idx="${idx}" data-student="${s.id}" ${(c.studentIds||[]).includes(s.id)?'checked':''}>
+          ${escapeHtml(s.name)} — ${escapeHtml(s.code||'no ID')} (${s.grade})
+        </label>`).join('');
       tr.innerHTML = `
         <td><input type="text" data-idx="${idx}" data-field="code" value="${escapeHtml(c.code)}"></td>
         <td><input type="text" data-idx="${idx}" data-field="guardian" value="${escapeHtml(c.guardian)}"></td>
-        <td><select multiple size="4" data-idx="${idx}" data-field="studentIds">${options}</select></td>
+        <td><div class="student-picker" style="max-height:130px; overflow-y:auto; border:1px solid var(--line); border-radius:6px; padding:6px 8px;">${options || '<span class="hint" style="margin:0;">Add students first.</span>'}</div></td>
         <td><button class="row-del" data-idx="${idx}">Remove</button></td>`;
       body.appendChild(tr);
     });
   }
   document.getElementById('cardsBody').addEventListener('input', e=>{
     const idx=e.target.getAttribute('data-idx'), field=e.target.getAttribute('data-field');
-    if(idx===null || field==='studentIds') return; cards[idx][field]=e.target.value;
+    if(idx===null || !field) return; cards[idx][field]=e.target.value;
   });
   document.getElementById('cardsBody').addEventListener('change', e=>{
-    const idx=e.target.getAttribute('data-idx'), field=e.target.getAttribute('data-field');
-    if(idx===null) return;
-    if(field==='studentIds'){
-      cards[idx].studentIds = Array.from(e.target.selectedOptions).map(o=>o.value);
-    } else {
-      cards[idx][field]=e.target.value;
+    if(e.target.type === 'checkbox' && e.target.hasAttribute('data-student')){
+      const idx = e.target.getAttribute('data-idx');
+      const studentId = e.target.getAttribute('data-student');
+      const set = new Set(cards[idx].studentIds || []);
+      if(e.target.checked) set.add(studentId); else set.delete(studentId);
+      cards[idx].studentIds = Array.from(set);
+      return;
     }
+    const idx=e.target.getAttribute('data-idx'), field=e.target.getAttribute('data-field');
+    if(idx===null || !field) return;
+    cards[idx][field]=e.target.value;
   });
   document.getElementById('cardsBody').addEventListener('click', e=>{
     if(e.target.classList.contains('row-del')){ cards.splice(e.target.getAttribute('data-idx'),1); renderCardsTable(); }
