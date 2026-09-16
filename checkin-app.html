@@ -212,6 +212,7 @@
 
     container.addEventListener('pointerdown', e=>{
       ensureAudio();
+      if(e.target.closest('.remove-slot-btn')) return; // let the click handler below manage this
       const slot = e.target.closest('.slot');
       if(!slot || slot.classList.contains('empty')){ resetRevealed(); return; }
       if(revealedSlot && revealedSlot !== slot){ resetRevealed(); }
