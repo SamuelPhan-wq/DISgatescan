@@ -95,6 +95,16 @@
   .col-filter-popover .cf-link{border:none; background:transparent; color:var(--muted); font-size:12px; cursor:pointer; padding:0;}
   .col-filter-popover .cf-link:hover{color:var(--ink); text-decoration:underline;}
   .view-mode-btn.active{background:var(--ink); color:var(--bg); border-color:var(--ink);}
+  .chip-list{display:flex; flex-wrap:wrap; gap:4px; margin-bottom:6px;}
+  .chip{background:var(--eyp-soft); border:1px solid var(--line); border-radius:100px; padding:2px 9px; font-size:11.5px; white-space:nowrap;}
+  .chip.pyp{background:var(--pyp-soft);}
+  .family-auto{font-size:13.5px; padding:5px 0 2px;}
+  .student-picker-popover{width:min(320px, 92vw);}
+  .sp-list{max-height:min(320px, 55vh); overflow-y:auto;}
+  .sp-row{display:flex; align-items:center; gap:8px; padding:9px 2px; border-bottom:1px solid var(--line); font-size:13.5px; cursor:pointer;}
+  .sp-row:last-child{border-bottom:none;}
+  .sp-row input[type=checkbox]{width:18px; height:18px; flex:none;}
+  .sp-name{flex:1;}
 </style>
 </head>
 <body>
@@ -167,7 +177,7 @@
   <div class="view" id="view-students">
     <div class="card">
       <h2>Students</h2>
-      <p class="hint">Each student just needs a name and grade — the programme (EYP/PYP) is set automatically. Students don't have their own scan code anymore; a pickup card (next tab) is what gets scanned. Click the ▾ on a column header to filter by its values.</p>
+      <p class="hint">Each student needs a name and grade — the programme (EYP/PYP) is set automatically. Family is optional but recommended: it auto-fills the Family field on that student's card(s) in the Cards tab. Students don't have their own scan code anymore; a pickup card (next tab) is what gets scanned. Click the ▾ on a column header to filter by its values.</p>
       <div class="roster-actions" style="margin-bottom:2px;">
         <button class="btn" id="clearStudentFilterBtn">Clear all filters</button>
         <span class="save-note" id="studentsCount" style="margin:0;"></span>
@@ -175,10 +185,11 @@
       <div class="table-scroll">
       <table id="studentsTable">
         <thead><tr>
-          <th style="width:35%">Name <button class="col-filter-btn" data-table="students" data-col="name">▾</button></th>
-          <th style="width:15%">ID <button class="col-filter-btn" data-table="students" data-col="code">▾</button></th>
-          <th style="width:20%">Grade <button class="col-filter-btn" data-table="students" data-col="grade">▾</button></th>
-          <th style="width:15%">Programme <button class="col-filter-btn" data-table="students" data-col="programme">▾</button></th>
+          <th style="width:26%">Name <button class="col-filter-btn" data-table="students" data-col="name">▾</button></th>
+          <th style="width:12%">ID <button class="col-filter-btn" data-table="students" data-col="code">▾</button></th>
+          <th style="width:14%">Grade <button class="col-filter-btn" data-table="students" data-col="grade">▾</button></th>
+          <th style="width:18%">Family <button class="col-filter-btn" data-table="students" data-col="family">▾</button></th>
+          <th style="width:13%">Programme <button class="col-filter-btn" data-table="students" data-col="programme">▾</button></th>
           <th></th>
         </tr></thead>
         <tbody id="studentsBody"></tbody>
@@ -193,9 +204,10 @@
     </div>
     <div class="card" style="margin-top:16px;">
       <h2>Import / export (Excel)</h2>
-      <p class="hint">One file, two tabs — Students and Cards — so you can use spreadsheet formulas on the Cards tab (e.g. to pull names or build the semicolon-separated sibling list) while referencing the Students tab. Download the template, edit it, then upload it back here. Uploaded rows are added to both tables for review — nothing is saved until you click Save students / Save cards.</p>
+      <p class="hint">One sheet, one row per student: Name, ID, Grade, Family, Card Codes, Guardians. To link siblings to the same card, give them the same Card Code. If a student has more than one guardian card (e.g. Mom and Dad each carry their own), list all their codes separated by semicolons in Card Codes (e.g. "FAM002; FAM003") with the matching guardians in the same order in Guardians (e.g. "Mr. Xiong; Mrs. Xiong") — still just one row. Download a blank template to start from scratch, or export your current students and cards to edit in bulk. Upload the file back here when you're done — uploaded rows are added to both tables for review, and nothing is saved until you click Save students / Save cards.</p>
       <div class="roster-actions">
-        <button class="btn" id="downloadWorkbookBtn">Download template (.xlsx)</button>
+        <button class="btn" id="downloadWorkbookBtn">Download blank template (.xlsx)</button>
+        <button class="btn" id="exportDataBtn">Export current data (.xlsx)</button>
         <label class="btn" style="cursor:pointer;">Upload file<input type="file" id="uploadWorkbook" accept=".xlsx,.xls" style="display:none;"></label>
         <span class="save-note" id="workbookNote" style="margin:0;"></span>
       </div>
@@ -205,7 +217,7 @@
   <div class="view" id="view-cards">
     <div class="card">
       <h2>Pickup cards</h2>
-      <p class="hint">Each card is what actually gets scanned. Give it a code, the guardian's name, an optional family label, and check off the student(s) it covers. If a card is lost, just remove it here; the student's record is untouched, and you can add them a new card. Click the ▾ on a column header to filter by its values.</p>
+      <p class="hint">Each card is what actually gets scanned. Give it a code and the guardian's name, then use "Edit students" to pick who it covers — Family fills in automatically from the students' Family field on the Students tab. If a family has students in both EYP and PYP, use "Add whole family…" inside Edit students to add all of them to one guardian's card in one click. If several guardians each carry their own card for the same kids (e.g. Mom, Dad, Grandma), just add one card per guardian and pick the same students (or family) on each. If a card is lost, just remove it here; the student's record is untouched, and you can add them a new card. Click the ▾ on a column header to filter by its values.</p>
       <div class="roster-actions" style="margin-bottom:2px;">
         <button class="btn" id="clearCardFilterBtn">Clear all filters</button>
         <span class="save-note" id="cardsCount" style="margin:0;"></span>
@@ -231,7 +243,7 @@
     </div>
     <div class="card" style="margin-top:16px;">
       <h2>Families</h2>
-      <p class="hint">How many cards exist per family, based on the Family field above. Give siblings' cards the same family label to see them grouped here.</p>
+      <p class="hint">How many cards exist per family, computed automatically from each linked student's Family field (set on the Students tab). Give siblings the same Family value there to see their cards grouped here.</p>
       <div class="table-scroll">
         <table>
           <thead><tr><th>Family</th><th>Cards</th></tr></thead>
@@ -240,7 +252,7 @@
       </div>
     </div>
     <div class="card" style="margin-top:16px;">
-      <p class="hint" style="margin:0;">Importing and exporting students and cards together (as an Excel file with two tabs) is on the Students tab.</p>
+      <p class="hint" style="margin:0;">Importing and exporting students and their cards together (as a single-sheet Excel file) is on the Students tab.</p>
     </div>
   </div>
 
@@ -306,14 +318,14 @@
   window.CheckinDB = {
     onStudents(cb){ onValue(ref(db, 'students'), snap=>{
       const v=snap.val()||{};
-      const arr = Object.entries(v).map(([id,d])=>({id, code:d.code||'', name:d.name||'', grade:d.grade||'Nursery'}));
+      const arr = Object.entries(v).map(([id,d])=>({id, code:d.code||'', name:d.name||'', grade:d.grade||'Nursery', family:d.family||''}));
       arr.sort((a,b)=> a.name.localeCompare(b.name));
       cb(arr);
     }); },
     onCards(cb){ onValue(ref(db, 'cards'), snap=>{ const v=snap.val()||{}; cb(Object.entries(v).map(([code,d])=>({code, guardian:d.guardian||'', family:d.family||'', studentIds:d.studentIds||[]}))); }); },
     onQueues(cb){ onValue(ref(db, 'queues'), snap => cb(snap.val() || {EYP:[], PYP:[]})); },
     saveStudents(arr){
-      const obj = {}; arr.forEach(s=>{ if(s.id) obj[s.id] = {code:s.code||'', name:s.name||'', grade:s.grade||'Nursery'}; });
+      const obj = {}; arr.forEach(s=>{ if(s.id) obj[s.id] = {code:s.code||'', name:s.name||'', grade:s.grade||'Nursery', family:s.family||''}; });
       return set(ref(db, 'students'), obj);
     },
     saveCards(arr){
@@ -607,6 +619,7 @@
   });
   function openFilterFor(btn, tableKey, columnKey, allValues, renderFn){
     closeFilterPopover();
+    if(typeof closeStudentPicker === 'function') closeStudentPicker();
     const rect = btn.getBoundingClientRect();
     const displayValues = Array.from(new Set(allValues.map(v=>v || '(blank)'))).sort((a,b)=>a.localeCompare(b));
     const pop = document.createElement('div');
@@ -660,6 +673,7 @@
     if(col==='grade') allValues = GRADE_LIST.slice();
     else if(col==='programme') allValues = ['EYP','PYP'];
     else if(col==='name') allValues = students.map(s=>s.name);
+    else if(col==='family') allValues = students.map(s=>s.family);
     else allValues = students.map(s=>s.code);
     openFilterFor(btn, 'students', col, allValues, renderStudentsTable);
   });
@@ -690,6 +704,7 @@
         if(!passesColumnFilter('students','name', s.name)) return false;
         if(!passesColumnFilter('students','code', s.code)) return false;
         if(!passesColumnFilter('students','grade', s.grade)) return false;
+        if(!passesColumnFilter('students','family', s.family)) return false;
         if(!passesColumnFilter('students','programme', programForGrade(s.grade))) return false;
         return true;
       });
@@ -705,6 +720,7 @@
         <td><input type="text" data-idx="${idx}" data-field="name" value="${escapeHtml(s.name)}"></td>
         <td><input type="text" data-idx="${idx}" data-field="code" value="${escapeHtml(s.code)}"></td>
         <td><select data-idx="${idx}" data-field="grade">${gradeOptions}</select></td>
+        <td><input type="text" data-idx="${idx}" data-field="family" value="${escapeHtml(s.family)}" placeholder="e.g. Souvannavong"></td>
         <td><span class="pill ${program==='PYP'?'pyp':'eyp'}">${program}</span></td>
         <td><button class="row-del" data-idx="${idx}">Remove</button></td>`;
       body.appendChild(tr);
@@ -719,12 +735,13 @@
     const idx=e.target.getAttribute('data-idx'), field=e.target.getAttribute('data-field');
     if(idx===null) return; students[idx][field]=e.target.value;
     if(field==='grade'){ renderStudentsTable(); renderCardsTable(); }
+    else if(field==='family'){ renderCardsTable(); }
   });
   document.getElementById('studentsBody').addEventListener('click', e=>{
     if(e.target.classList.contains('row-del')){ students.splice(e.target.getAttribute('data-idx'),1); renderStudentsTable(); renderCardsTable(); }
   });
   document.getElementById('addStudentBtn').addEventListener('click', ()=>{
-    students.push({id:genId(), code:'', name:'', grade:'Nursery'}); renderStudentsTable(); renderCardsTable();
+    students.push({id:genId(), code:'', name:'', grade:'Nursery', family:''}); renderStudentsTable(); renderCardsTable();
   });
   document.getElementById('saveStudentsBtn').addEventListener('click', ()=>{
     const note=document.getElementById('studentsNote'); note.textContent='Saving…';
@@ -740,19 +757,30 @@
   });
   document.getElementById('downloadWorkbookBtn').addEventListener('click', ()=>{
     const wb = XLSX.utils.book_new();
-    const wsStudents = XLSX.utils.aoa_to_sheet([
-      ['Name','ID','Grade'],
-      ['Nari Souvannavong','ST1042','Pre-K'],
-      ['Ben Xiong','ST1043','G3']
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Name','ID','Grade','Family','Card Codes','Guardians'],
+      ['Nari Souvannavong','ST1042','Pre-K','Souvannavong','FAM001','Mrs. Souvannavong'],
+      ['Somchai Souvannavong','ST1044','G1','Souvannavong','FAM001','Mrs. Souvannavong'],
+      ['Ben Xiong','ST1043','G3','Xiong','FAM002; FAM003','Mr. Xiong; Mrs. Xiong']
     ]);
-    const wsCards = XLSX.utils.aoa_to_sheet([
-      ['Code','Guardian','Family','Students'],
-      ['FAM001','Mrs. Souvannavong','Souvannavong','Nari Souvannavong; Somchai Souvannavong'],
-      ['FAM002','Mr. Xiong','Xiong','Ben Xiong']
-    ]);
-    XLSX.utils.book_append_sheet(wb, wsStudents, 'Students');
-    XLSX.utils.book_append_sheet(wb, wsCards, 'Cards');
+    XLSX.utils.book_append_sheet(wb, ws, 'Students');
     XLSX.writeFile(wb, 'checkin-template.xlsx');
+  });
+
+  document.getElementById('exportDataBtn').addEventListener('click', ()=>{
+    const rows = students.map(s=>{
+      const linkedCards = cards.filter(c=>(c.studentIds||[]).includes(s.id));
+      const codes = linkedCards.map(c=>c.code).join('; ');
+      const guardians = linkedCards.map(c=>c.guardian).join('; ');
+      return [s.name, s.code, s.grade, s.family||'', codes, guardians];
+    });
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Name','ID','Grade','Family','Card Codes','Guardians'],
+      ...rows
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Students');
+    XLSX.writeFile(wb, 'checkin-students-export.xlsx');
   });
 
   document.getElementById('uploadWorkbook').addEventListener('change', (e)=>{
@@ -765,47 +793,52 @@
       try{
         const data = new Uint8Array(ev.target.result);
         const wb = XLSX.read(data, {type:'array'});
+        const sheet = wb.Sheets['Students'] || wb.Sheets[wb.SheetNames[0]];
+        if(!sheet) throw new Error('No sheet found in that file');
+        const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
 
         let studentsAdded = 0;
-        const studentsSheet = wb.Sheets['Students'];
-        if(studentsSheet){
-          const rows = XLSX.utils.sheet_to_json(studentsSheet, {defval:''});
-          rows.forEach(row=>{
-            const name = (row.Name || row.name || '').toString().trim();
-            if(!name) return;
-            const code = (row.ID || row.id || '').toString().trim();
-            const gradeRaw = (row.Grade || row.grade || '').toString().trim();
-            const match = GRADE_LIST.find(g=>g.toLowerCase()===gradeRaw.toLowerCase());
-            students.push({id:genId(), code:code, name:name, grade:match||'Nursery'});
-            studentsAdded++;
-          });
-        }
+        const cardMap = new Map();
+        const studentByKey = new Map(); // dedupes a student who appears on multiple rows (one per guardian card)
+        rows.forEach(row=>{
+          const name = (row.Name || row.name || '').toString().trim();
+          if(!name) return;
+          const code = (row.ID || row.id || '').toString().trim();
+          const gradeRaw = (row.Grade || row.grade || '').toString().trim();
+          const match = GRADE_LIST.find(g=>g.toLowerCase()===gradeRaw.toLowerCase());
+          const family = (row.Family || row.family || '').toString().trim();
 
-        let cardsAdded = 0, unmatched = [];
-        const cardsSheet = wb.Sheets['Cards'];
-        if(cardsSheet){
-          const rows = XLSX.utils.sheet_to_json(cardsSheet, {defval:''});
-          rows.forEach(row=>{
-            const code = (row.Code || row.code || '').toString().trim();
-            if(!code) return;
-            const guardian = (row.Guardian || row.guardian || '').toString().trim();
-            const family = (row.Family || row.family || '').toString().trim();
-            const namesPart = (row.Students || row.students || '').toString().trim();
-            const names = namesPart.split(';').map(n=>n.trim()).filter(Boolean);
-            const studentIds = [];
-            names.forEach(n=>{
-              const match = students.find(s=>s.name.trim().toLowerCase()===n.toLowerCase());
-              if(match) studentIds.push(match.id); else unmatched.push(n);
-            });
-            cards.push({code, guardian, family, studentIds});
-            cardsAdded++;
+          const key = code ? ('id:' + code.toLowerCase()) : ('name:' + name.toLowerCase());
+          let student = studentByKey.get(key);
+          if(!student){
+            student = {id:genId(), code:code, name:name, grade:match||'Nursery', family:family};
+            students.push(student);
+            studentByKey.set(key, student);
+            studentsAdded++;
+          } else {
+            if(family) student.family = family;
+            if(match) student.grade = match;
+          }
+
+          const codesPart = (row['Card Codes'] || row['card codes'] || row['Card Code'] || row['card code'] || '').toString().trim();
+          if(!codesPart) return;
+          const guardiansPart = (row['Guardians'] || row['guardians'] || row.Guardian || row.guardian || '').toString().trim();
+          const codesList = codesPart.split(';').map(x=>x.trim()).filter(Boolean);
+          const guardiansList = guardiansPart.split(';').map(x=>x.trim());
+          codesList.forEach((cardCode, i)=>{
+            const guardian = guardiansList[i] || '';
+            if(!cardMap.has(cardCode)) cardMap.set(cardCode, {code:cardCode, guardian:'', family:'', studentIds:[]});
+            const entry = cardMap.get(cardCode);
+            if(guardian && !entry.guardian) entry.guardian = guardian;
+            if(!entry.studentIds.includes(student.id)) entry.studentIds.push(student.id);
           });
-        }
+        });
+
+        let cardsAdded = 0;
+        cardMap.forEach(entry=>{ cards.push(entry); cardsAdded++; });
 
         renderStudentsTable(); renderCardsTable();
-        let msg = 'Added ' + studentsAdded + ' student row' + (studentsAdded===1?'':'s') + ' and ' + cardsAdded + ' card row' + (cardsAdded===1?'':'s') + ' — review both tabs, then click Save students and Save cards.';
-        if(unmatched.length) msg += ' Not matched to a student: ' + unmatched.join(', ') + '.';
-        note.textContent = msg;
+        note.textContent = 'Added ' + studentsAdded + ' student row' + (studentsAdded===1?'':'s') + ' and ' + cardsAdded + ' card' + (cardsAdded===1?'':'s') + ' — review both tabs, then click Save students and Save cards.';
       }catch(err){
         note.textContent = 'Could not read that file — ' + err;
       }
@@ -830,30 +863,132 @@
         return true;
       });
   }
+  function familyForCard(c){
+    const fams = Array.from(new Set((c.studentIds||[]).map(sid=>{
+      const st = students.find(s=>s.id===sid);
+      return st ? (st.family||'').trim() : '';
+    }).filter(Boolean)));
+    return fams.join(' / ');
+  }
+  function cardChipsHtml(c){
+    const selected = (c.studentIds||[]).map(sid=>students.find(s=>s.id===sid)).filter(Boolean);
+    return selected.length
+      ? selected.map(s=>`<span class="chip ${programForGrade(s.grade)==='PYP'?'pyp':'eyp'}">${escapeHtml(s.name)}</span>`).join('')
+      : '<span class="hint" style="margin:0;">No students yet.</span>';
+  }
   function renderCardsTable(){
     const body = document.getElementById('cardsBody'); body.innerHTML = '';
     const filtered = getFilteredCards();
     filtered.forEach(({c, idx})=>{
+      c.family = familyForCard(c);
       const tr = document.createElement('tr');
-      const options = students.map(s=>`
-        <label style="display:flex; align-items:center; gap:6px; font-size:12.5px; padding:3px 0;">
-          <input type="checkbox" data-idx="${idx}" data-student="${s.id}" ${(c.studentIds||[]).includes(s.id)?'checked':''}>
-          ${escapeHtml(s.name)} — ${escapeHtml(s.code||'no ID')} (${s.grade})
-        </label>`).join('');
+      tr.setAttribute('data-row-idx', idx);
+      const selectedCount = (c.studentIds||[]).length;
       tr.innerHTML = `
         <td><input type="text" data-idx="${idx}" data-field="code" value="${escapeHtml(c.code)}"></td>
         <td><input type="text" data-idx="${idx}" data-field="guardian" value="${escapeHtml(c.guardian)}"></td>
         <td>
-          <input type="text" data-idx="${idx}" data-field="family" value="${escapeHtml(c.family)}" placeholder="e.g. Souvannavong">
+          <div class="family-auto">${c.family ? escapeHtml(c.family) : '<span class="hint" style="margin:0;">—</span>'}</div>
           <div class="hint family-count" data-idx="${idx}" style="margin:2px 0 0;"></div>
         </td>
-        <td><div class="student-picker" style="max-height:130px; overflow-y:auto; border:1px solid var(--line); border-radius:6px; padding:6px 8px;">${options || '<span class="hint" style="margin:0;">Add students first.</span>'}</div></td>
+        <td>
+          <div class="chip-list">${cardChipsHtml(c)}</div>
+          <button type="button" class="btn sp-open-btn" data-idx="${idx}">Edit students${selectedCount ? ' (' + selectedCount + ')' : ''}</button>
+        </td>
         <td><button class="row-del" data-idx="${idx}">Remove</button></td>`;
       body.appendChild(tr);
     });
     updateFamilyCounts();
     renderFamilyTally();
     document.getElementById('cardsCount').textContent = filtered.length + ' of ' + cards.length + ' shown';
+  }
+  function updateCardRowDisplay(idx){
+    const tr = document.querySelector('tr[data-row-idx="' + idx + '"]');
+    if(!tr) return;
+    const c = cards[idx];
+    tr.querySelector('.chip-list').innerHTML = cardChipsHtml(c);
+    const selectedCount = (c.studentIds||[]).length;
+    tr.querySelector('.sp-open-btn').textContent = 'Edit students' + (selectedCount ? ' (' + selectedCount + ')' : '');
+    tr.querySelector('.family-auto').innerHTML = c.family ? escapeHtml(c.family) : '<span class="hint" style="margin:0;">—</span>';
+    updateFamilyCounts();
+    renderFamilyTally();
+  }
+
+  // ---------- student picker popover (Cards tab) ----------
+  let openStudentPopover = null;
+  function closeStudentPicker(){
+    if(openStudentPopover){ openStudentPopover.remove(); openStudentPopover = null; }
+  }
+  document.addEventListener('click', e=>{
+    if(openStudentPopover && !openStudentPopover.contains(e.target) && !e.target.classList.contains('sp-open-btn')){
+      closeStudentPicker();
+    }
+  });
+  function openStudentPicker(btn, idx){
+    closeFilterPopover();
+    closeStudentPicker();
+    const rect = btn.getBoundingClientRect();
+    const familyOptions = Array.from(new Set(students.map(s=>(s.family||'').trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
+    const pop = document.createElement('div');
+    pop.className = 'col-filter-popover student-picker-popover';
+    pop.style.top = Math.min(rect.bottom + 4, window.innerHeight - 60) + 'px';
+    pop.style.left = Math.min(Math.max(8, rect.left), window.innerWidth - 320 - 8) + 'px';
+    pop.innerHTML = `
+      ${familyOptions.length ? `
+      <div style="display:flex; gap:6px; margin-bottom:8px;">
+        <select class="filter-input sp-family-select" style="flex:1; min-width:0;">
+          <option value="">Add whole family…</option>
+          ${familyOptions.map(f=>`<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('')}
+        </select>
+        <button type="button" class="btn sp-family-add">Add</button>
+      </div>` : ''}
+      <input type="text" class="filter-input sp-search" placeholder="Search students…" style="width:100%; margin-bottom:8px; box-sizing:border-box;">
+      <div class="sp-list"></div>
+      <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+        <button type="button" class="btn sp-done">Done</button>
+      </div>`;
+    document.body.appendChild(pop);
+    openStudentPopover = pop;
+
+    function renderList(filterText){
+      const ft = (filterText||'').toLowerCase();
+      const listEl = pop.querySelector('.sp-list');
+      const visible = students.filter(s=> s.name.toLowerCase().includes(ft) || (s.code||'').toLowerCase().includes(ft));
+      listEl.innerHTML = visible.length ? visible.map(s=>{
+        const checked = (cards[idx].studentIds||[]).includes(s.id);
+        const prog = programForGrade(s.grade);
+        return `<label class="sp-row">
+          <input type="checkbox" class="sp-check" value="${s.id}" ${checked?'checked':''}>
+          <span class="sp-name">${escapeHtml(s.name)}</span>
+          <span class="pill ${prog==='PYP'?'pyp':'eyp'}">${prog}</span>
+        </label>`;
+      }).join('') : '<div class="hint" style="margin:4px 0;">No matching students.</div>';
+    }
+    renderList('');
+    pop.querySelector('.sp-search').addEventListener('input', e=>renderList(e.target.value));
+    pop.addEventListener('change', e=>{
+      if(!e.target.classList.contains('sp-check')) return;
+      const set = new Set(cards[idx].studentIds || []);
+      if(e.target.checked) set.add(e.target.value); else set.delete(e.target.value);
+      cards[idx].studentIds = Array.from(set);
+      cards[idx].family = familyForCard(cards[idx]);
+      updateCardRowDisplay(idx);
+    });
+    const familyAddBtn = pop.querySelector('.sp-family-add');
+    if(familyAddBtn){
+      familyAddBtn.addEventListener('click', ()=>{
+        const familySelect = pop.querySelector('.sp-family-select');
+        const fam = familySelect.value;
+        if(!fam) return;
+        const set = new Set(cards[idx].studentIds || []);
+        students.filter(s=>(s.family||'').trim()===fam).forEach(s=>set.add(s.id));
+        cards[idx].studentIds = Array.from(set);
+        cards[idx].family = familyForCard(cards[idx]);
+        updateCardRowDisplay(idx);
+        renderList(pop.querySelector('.sp-search').value);
+      });
+    }
+    pop.querySelector('.sp-done').addEventListener('click', closeStudentPicker);
   }
 
   function familyCounts(){
@@ -888,22 +1023,15 @@
     const idx=e.target.getAttribute('data-idx'), field=e.target.getAttribute('data-field');
     if(idx===null || !field) return;
     cards[idx][field]=e.target.value;
-    if(field==='family') updateFamilyCounts();
   });
   document.getElementById('cardsBody').addEventListener('change', e=>{
-    if(e.target.type === 'checkbox' && e.target.hasAttribute('data-student')){
-      const idx = e.target.getAttribute('data-idx');
-      const studentId = e.target.getAttribute('data-student');
-      const set = new Set(cards[idx].studentIds || []);
-      if(e.target.checked) set.add(studentId); else set.delete(studentId);
-      cards[idx].studentIds = Array.from(set);
-      return;
-    }
     const idx=e.target.getAttribute('data-idx'), field=e.target.getAttribute('data-field');
     if(idx===null || !field) return;
     cards[idx][field]=e.target.value;
   });
   document.getElementById('cardsBody').addEventListener('click', e=>{
+    const spBtn = e.target.closest('.sp-open-btn');
+    if(spBtn){ openStudentPicker(spBtn, spBtn.getAttribute('data-idx')); return; }
     if(e.target.classList.contains('row-del')){ cards.splice(e.target.getAttribute('data-idx'),1); renderCardsTable(); }
   });
   document.getElementById('addCardBtn').addEventListener('click', ()=>{
