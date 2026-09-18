@@ -86,15 +86,25 @@
   .save-note{font-size:12.5px; color:var(--muted); margin-top:10px; min-height:16px;}
   .table-scroll{overflow-x:auto;}
   .filter-input{border:1px solid var(--line); border-radius:9px; padding:8px 12px; font-size:13.5px; background:#fff; color:var(--ink);}
-  .col-filter-btn{border:none; background:transparent; cursor:pointer; color:var(--muted); font-size:10px; padding:0 0 0 4px; vertical-align:middle;}
-  .col-filter-btn.active{color:var(--ink); font-weight:bold;}
   .col-filter-popover{
     position:fixed; z-index:1000; background:#fff; border:1px solid var(--line); border-radius:10px;
     box-shadow:0 8px 24px rgba(0,0,0,0.12); padding:10px; width:220px; font-family:var(--font-ui);
   }
-  .col-filter-popover .cf-link{border:none; background:transparent; color:var(--muted); font-size:12px; cursor:pointer; padding:0;}
-  .col-filter-popover .cf-link:hover{color:var(--ink); text-decoration:underline;}
   .view-mode-btn.active{background:var(--ink); color:var(--bg); border-color:var(--ink);}
+  th.sortable{cursor:pointer; user-select:none;}
+  th.sortable:hover{color:var(--ink);}
+  .sort-ind{font-size:10px; margin-left:3px; opacity:0.6;}
+  #pinLock{position:fixed; inset:0; z-index:5000; background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:22px;}
+  #pinLock .pin-title{font-family:var(--font-display); font-size:20px;}
+  #pinLock .pin-dots{display:flex; gap:14px;}
+  #pinLock .pin-dot{width:14px; height:14px; border-radius:50%; border:1.5px solid var(--muted); background:transparent;}
+  #pinLock .pin-dot.filled{background:var(--ink); border-color:var(--ink);}
+  #pinLock .pin-dots.shake{animation:pinShake 0.4s;}
+  @keyframes pinShake{ 10%,90%{transform:translateX(-6px);} 20%,80%{transform:translateX(6px);} 30%,50%,70%{transform:translateX(-10px);} 40%,60%{transform:translateX(10px);} }
+  #pinLock .pin-pad{display:grid; grid-template-columns:repeat(3, 64px); gap:14px;}
+  #pinLock .pin-key{width:64px; height:64px; border-radius:50%; border:1px solid var(--line); background:#fff; font-size:22px; cursor:pointer; color:var(--ink);}
+  #pinLock .pin-key:hover{border-color:var(--ink);}
+  #pinLock .pin-key.wide{grid-column:span 1;}
   .chip-list{display:flex; flex-wrap:wrap; gap:4px; margin-bottom:6px;}
   .chip{background:var(--eyp-soft); border:1px solid var(--line); border-radius:100px; padding:2px 9px; font-size:11.5px; white-space:nowrap;}
   .chip.pyp{background:var(--pyp-soft);}
@@ -108,6 +118,24 @@
 </style>
 </head>
 <body>
+<div id="pinLock">
+  <div class="pin-title">Enter PIN</div>
+  <div class="pin-dots" id="pinDots"></div>
+  <div class="pin-pad" id="pinPad">
+    <button class="pin-key" data-key="1">1</button>
+    <button class="pin-key" data-key="2">2</button>
+    <button class="pin-key" data-key="3">3</button>
+    <button class="pin-key" data-key="4">4</button>
+    <button class="pin-key" data-key="5">5</button>
+    <button class="pin-key" data-key="6">6</button>
+    <button class="pin-key" data-key="7">7</button>
+    <button class="pin-key" data-key="8">8</button>
+    <button class="pin-key" data-key="9">9</button>
+    <button class="pin-key" data-key="back">⌫</button>
+    <button class="pin-key" data-key="0">0</button>
+    <div></div>
+  </div>
+</div>
 <div class="app">
 
   <div class="setup-banner" id="setupBanner">
@@ -124,7 +152,9 @@
       <button class="tab" data-view="pyp">PYP display</button>
       <button class="tab" data-view="students">Students</button>
       <button class="tab" data-view="cards">Cards</button>
-      <button class="tab" data-view="records">Records</button>
+      <button class="tab" data-view="records">Student records</button>
+      <button class="tab" data-view="staff">Staff</button>
+      <button class="tab" data-view="staffrecords">Staff records</button>
     </div>
   </div>
 
@@ -177,19 +207,18 @@
   <div class="view" id="view-students">
     <div class="card">
       <h2>Students</h2>
-      <p class="hint">Each student needs a name and grade — the programme (EYP/PYP) is set automatically. Family is optional but recommended: it auto-fills the Family field on that student's card(s) in the Cards tab. Students don't have their own scan code anymore; a pickup card (next tab) is what gets scanned. Click the ▾ on a column header to filter by its values.</p>
+      <p class="hint">Each student needs a name and grade — the programme (EYP/PYP) is set automatically. Family is optional but recommended: it auto-fills the Family field on that student's card(s) in the Cards tab. Students don't have their own scan code anymore; a pickup card (next tab) is what gets scanned. Click a column header to sort A–Z (click again for Z–A).</p>
       <div class="roster-actions" style="margin-bottom:2px;">
-        <button class="btn" id="clearStudentFilterBtn">Clear all filters</button>
         <span class="save-note" id="studentsCount" style="margin:0;"></span>
       </div>
       <div class="table-scroll">
       <table id="studentsTable">
         <thead><tr>
-          <th style="width:26%">Name <button class="col-filter-btn" data-table="students" data-col="name">▾</button></th>
-          <th style="width:12%">ID <button class="col-filter-btn" data-table="students" data-col="code">▾</button></th>
-          <th style="width:14%">Grade <button class="col-filter-btn" data-table="students" data-col="grade">▾</button></th>
-          <th style="width:18%">Family <button class="col-filter-btn" data-table="students" data-col="family">▾</button></th>
-          <th style="width:13%">Programme <button class="col-filter-btn" data-table="students" data-col="programme">▾</button></th>
+          <th class="sortable" style="width:26%" data-sort="name">Name<span class="sort-ind"></span></th>
+          <th class="sortable" style="width:12%" data-sort="code">ID<span class="sort-ind"></span></th>
+          <th class="sortable" style="width:14%" data-sort="grade">Grade<span class="sort-ind"></span></th>
+          <th class="sortable" style="width:18%" data-sort="family">Family<span class="sort-ind"></span></th>
+          <th class="sortable" style="width:13%" data-sort="programme">Programme<span class="sort-ind"></span></th>
           <th></th>
         </tr></thead>
         <tbody id="studentsBody"></tbody>
@@ -204,7 +233,7 @@
     </div>
     <div class="card" style="margin-top:16px;">
       <h2>Import / export (Excel)</h2>
-      <p class="hint">One sheet, one row per student: Name, ID, Grade, Family, Card Codes, Guardians. To link siblings to the same card, give them the same Card Code. If a student has more than one guardian card (e.g. Mom and Dad each carry their own), list all their codes separated by semicolons in Card Codes (e.g. "FAM002; FAM003") with the matching guardians in the same order in Guardians (e.g. "Mr. Xiong; Mrs. Xiong") — still just one row. Download a blank template to start from scratch, or export your current students and cards to edit in bulk. Upload the file back here when you're done — uploaded rows are added to both tables for review, and nothing is saved until you click Save students / Save cards.</p>
+      <p class="hint">One sheet, one row per student: Name, ID, Grade, Family, Card Codes, Guardians. Easiest path: just fill in Family and Guardians and leave Card Codes blank — a card is created automatically for each family + guardian combination, so you never have to set anything up in the Cards tab by hand. Give siblings the same Family and Guardian to share one auto-created card. If you want a specific code instead (e.g. to match a pre-printed card), fill in Card Codes yourself — for more than one guardian card on the same student, separate codes with semicolons (e.g. "FAM002; FAM003") with the matching guardians in the same order (e.g. "Mr. Xiong; Mrs. Xiong"), still just one row. Download a blank template to start from scratch, or export your current students and cards to edit in bulk. Upload the file back here when you're done — uploaded rows are added to both tables for review, and nothing is saved until you click Save students / Save cards.</p>
       <div class="roster-actions">
         <button class="btn" id="downloadWorkbookBtn">Download blank template (.xlsx)</button>
         <button class="btn" id="exportDataBtn">Export current data (.xlsx)</button>
@@ -217,18 +246,17 @@
   <div class="view" id="view-cards">
     <div class="card">
       <h2>Pickup cards</h2>
-      <p class="hint">Each card is what actually gets scanned. Give it a code and the guardian's name, then use "Edit students" to pick who it covers — Family fills in automatically from the students' Family field on the Students tab. If a family has students in both EYP and PYP, use "Add whole family…" inside Edit students to add all of them to one guardian's card in one click. If several guardians each carry their own card for the same kids (e.g. Mom, Dad, Grandma), just add one card per guardian and pick the same students (or family) on each. If a card is lost, just remove it here; the student's record is untouched, and you can add them a new card. Click the ▾ on a column header to filter by its values.</p>
+      <p class="hint">Each card is what actually gets scanned. Give it a code and the guardian's name, then use "Edit students" to pick who it covers — Family fills in automatically from the students' Family field on the Students tab. If a family has students in both EYP and PYP, use "Add whole family…" inside Edit students to add all of them to one guardian's card in one click. If several guardians each carry their own card for the same kids (e.g. Mom, Dad, Grandma), just add one card per guardian and pick the same students (or family) on each. If a card is lost, just remove it here; the student's record is untouched, and you can add them a new card. Click a column header to sort A–Z (click again for Z–A).</p>
       <div class="roster-actions" style="margin-bottom:2px;">
-        <button class="btn" id="clearCardFilterBtn">Clear all filters</button>
         <span class="save-note" id="cardsCount" style="margin:0;"></span>
       </div>
       <div class="table-scroll">
       <table id="cardsTable">
         <thead><tr>
-          <th style="width:15%">Code <button class="col-filter-btn" data-table="cards" data-col="code">▾</button></th>
-          <th style="width:18%">Guardian <button class="col-filter-btn" data-table="cards" data-col="guardian">▾</button></th>
-          <th style="width:15%">Family <button class="col-filter-btn" data-table="cards" data-col="family">▾</button></th>
-          <th style="width:37%">Student(s) <button class="col-filter-btn" data-table="cards" data-col="students">▾</button></th>
+          <th class="sortable" style="width:15%" data-sort="code">Code<span class="sort-ind"></span></th>
+          <th class="sortable" style="width:18%" data-sort="guardian">Guardian<span class="sort-ind"></span></th>
+          <th class="sortable" style="width:15%" data-sort="family">Family<span class="sort-ind"></span></th>
+          <th style="width:37%">Student(s)</th>
           <th></th>
         </tr></thead>
         <tbody id="cardsBody"></tbody>
@@ -290,6 +318,76 @@
     </div>
   </div>
 
+  <div class="view" id="view-staff">
+    <div class="card">
+      <h2>Staff &amp; bus cards</h2>
+      <p class="hint">Each staff or bus card is its own row — one code per person, no separate cards step needed like Students has. Type is either Staff or Bus. These cards scan through the same Scan station and security gate as pickup cards; the system tells them apart automatically. Click a column header to sort A–Z (click again for Z–A).</p>
+      <div class="roster-actions" style="margin-bottom:2px;">
+        <span class="save-note" id="staffCount" style="margin:0;"></span>
+      </div>
+      <div class="table-scroll">
+      <table id="staffTable">
+        <thead><tr>
+          <th class="sortable" style="width:35%" data-sort="name">Name<span class="sort-ind"></span></th>
+          <th class="sortable" style="width:25%" data-sort="type">Type<span class="sort-ind"></span></th>
+          <th class="sortable" style="width:25%" data-sort="code">Code<span class="sort-ind"></span></th>
+          <th></th>
+        </tr></thead>
+        <tbody id="staffBody"></tbody>
+      </table>
+      </div>
+      <div class="roster-actions">
+        <button class="btn" id="addStaffBtn">Add staff / bus card</button>
+        <button class="btn primary" id="saveStaffBtn">Save staff</button>
+        <button class="btn danger" id="deleteStaffBtn">Delete all staff</button>
+      </div>
+      <div class="save-note" id="staffNote"></div>
+    </div>
+    <div class="card" style="margin-top:16px;">
+      <h2>Import / export (Excel)</h2>
+      <p class="hint">One sheet, one row per person: Name, Type (Staff or Bus), Code — a separate file from the Students sheet. Download a blank template to start from scratch, or export your current staff to edit in bulk. Upload the file back here when you're done — nothing is saved until you click Save staff.</p>
+      <div class="roster-actions">
+        <button class="btn" id="downloadStaffWorkbookBtn">Download blank template (.xlsx)</button>
+        <button class="btn" id="exportStaffDataBtn">Export current data (.xlsx)</button>
+        <label class="btn" style="cursor:pointer;">Upload file<input type="file" id="uploadStaffWorkbook" accept=".xlsx,.xls" style="display:none;"></label>
+        <span class="save-note" id="staffWorkbookNote" style="margin:0;"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="view" id="view-staffrecords">
+    <div class="card">
+      <h2>Staff scan records</h2>
+      <p class="hint">Every successful staff/bus check-in is logged here by month.</p>
+      <div class="roster-actions">
+        <input type="month" id="staffRecordMonth" class="btn" style="cursor:auto;">
+        <button class="btn" id="loadStaffRecordsBtn">Load</button>
+        <button class="btn" id="exportStaffRecordsBtn">Export CSV</button>
+        <button class="btn danger" id="deleteStaffRecordsBtn">Delete this month's records</button>
+        <span class="save-note" id="staffRecordCount" style="margin:0;"></span>
+      </div>
+      <div class="roster-actions" style="margin-top:2px;">
+        <button class="btn view-mode-btn active" data-mode="all">All scans</button>
+        <button class="btn view-mode-btn" data-mode="tardy">Tardy list (8:00–8:30am)</button>
+      </div>
+      <div id="staffTallySection" style="display:none; margin-top:16px;">
+        <h2 style="font-size:16px;">Tally</h2>
+        <div class="table-scroll">
+        <table>
+          <thead><tr><th>Name</th><th>Type</th><th>Count</th></tr></thead>
+          <tbody id="staffTallyBody"></tbody>
+        </table>
+        </div>
+      </div>
+      <div class="table-scroll" style="margin-top:14px;">
+      <table id="staffRecordsTable">
+        <thead><tr><th>Date</th><th>Time</th><th>Name</th><th>Type</th></tr></thead>
+        <tbody id="staffRecordsBody"></tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <script type="module">
@@ -324,6 +422,31 @@
     }); },
     onCards(cb){ onValue(ref(db, 'cards'), snap=>{ const v=snap.val()||{}; cb(Object.entries(v).map(([code,d])=>({code, guardian:d.guardian||'', family:d.family||'', studentIds:d.studentIds||[]}))); }); },
     onQueues(cb){ onValue(ref(db, 'queues'), snap => cb(snap.val() || {EYP:[], PYP:[]})); },
+    onStaff(cb){ onValue(ref(db, 'staff'), snap=>{
+      const v=snap.val()||{};
+      const arr = Object.entries(v).map(([id,d])=>({id, name:d.name||'', type:d.type||'Staff', code:d.code||''}));
+      arr.sort((a,b)=> a.name.localeCompare(b.name));
+      cb(arr);
+    }); },
+    saveStaff(arr){
+      const obj = {}; arr.forEach(s=>{ if(s.id) obj[s.id] = {name:s.name||'', type:s.type||'Staff', code:s.code||''}; });
+      return set(ref(db, 'staff'), obj);
+    },
+    logStaffScan(entry){
+      const now = new Date();
+      const monthKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+      const r = push(ref(db, 'staffScanLog/' + monthKey));
+      return set(r, {
+        staffId: entry.staffId, name: entry.name, type: entry.type,
+        date: now.toLocaleDateString(), time: entry.time, ts: now.getTime()
+      });
+    },
+    async getStaffMonthLog(monthKey){
+      const snap = await get(ref(db, 'staffScanLog/' + monthKey));
+      const v = snap.val() || {};
+      return Object.values(v).sort((a,b)=>(b.ts||0)-(a.ts||0));
+    },
+    deleteStaffMonthLog(monthKey){ return remove(ref(db, 'staffScanLog/' + monthKey)); },
     saveStudents(arr){
       const obj = {}; arr.forEach(s=>{ if(s.id) obj[s.id] = {code:s.code||'', name:s.name||'', grade:s.grade||'Nursery', family:s.family||''}; });
       return set(ref(db, 'students'), obj);
@@ -362,6 +485,7 @@
 
   let students = [];
   let cards = [];
+  let staff = [];
   let queues = {EYP:[], PYP:[]};
 
   function whenReady(fn){
@@ -371,6 +495,7 @@
   whenReady(()=>{
     window.CheckinDB.onStudents(data=>{ students = data; renderStudentsTable(); renderCardsTable(); });
     window.CheckinDB.onCards(data=>{ cards = data; renderCardsTable(); });
+    window.CheckinDB.onStaff(data=>{ staff = data; renderStaffTable(); });
     window.CheckinDB.onQueues(data=>{
       const newQueues = { EYP: (data.EYP||[]).filter(Boolean), PYP: (data.PYP||[]).filter(Boolean) };
       const newEypTop = newQueues.EYP[0] ? (newQueues.EYP[0].studentId + '|' + newQueues.EYP[0].time) : null;
@@ -443,7 +568,15 @@
     const code = (rawCode||'').trim();
     if(!code) return {ok:false};
     const cardEntry = cards.find(c => c.code.trim().toLowerCase() === code.toLowerCase());
-    if(!cardEntry) return {ok:false, notFound:true, code:code};
+    if(!cardEntry){
+      const staffEntry = staff.find(s => (s.code||'').trim().toLowerCase() === code.toLowerCase());
+      if(staffEntry){
+        const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+        await window.CheckinDB.logStaffScan({staffId:staffEntry.id, name:staffEntry.name, type:staffEntry.type, time:time});
+        return {ok:true, kind:'staff', name:staffEntry.name, type:staffEntry.type, time:time};
+      }
+      return {ok:false, notFound:true, code:code};
+    }
 
     const results = [];
     for(const studentId of (cardEntry.studentIds || [])){
@@ -472,7 +605,13 @@
     checkInCard(code).then(res=>{
       if(!res.ok){
         fb.className = 'feedback bad';
-        fb.innerHTML = `<div><div class="fb-name">Card not found</div><div class="fb-sub">"${escapeHtml(code)}" isn't linked to any student — add it under Cards.</div></div>`;
+        fb.innerHTML = `<div><div class="fb-name">Card not found</div><div class="fb-sub">"${escapeHtml(code)}" isn't linked to any student or staff card.</div></div>`;
+        return;
+      }
+      if(res.kind === 'staff'){
+        playChime('EYP');
+        fb.className = 'feedback ok';
+        fb.innerHTML = `<div><div class="fb-name">${escapeHtml(res.name)}</div><div class="fb-sub">Staff checked in — ${escapeHtml(res.type)} · ${escapeHtml(res.time)}</div></div>`;
         return;
       }
       if(!res.results.length){
@@ -592,127 +731,55 @@
     if(confirm('Are you sure you want to clear the PYP queue? This can\'t be undone.')){ window.CheckinDB.saveQueue('PYP', []); }
   });
 
-  // ---------- Excel-style column filters (shared by Students and Cards tables) ----------
-  const filterState = { students: {}, cards: {} };
-  let openFilterPopover = null;
-
-  function passesColumnFilter(tableKey, columnKey, value){
-    const sel = filterState[tableKey][columnKey];
-    if(!sel) return true;
-    if(Array.isArray(value)) return value.length ? value.some(v=>sel.has(v)) : sel.has('(blank)');
-    return sel.has(value || '(blank)');
+  // ---------- alphabetical column sorting (shared by Students, Cards, Staff tables) ----------
+  const sortState = {
+    students: {col:'name', dir:'asc'},
+    cards: {col:'code', dir:'asc'},
+    staff: {col:'name', dir:'asc'}
+  };
+  function sortIndexed(items, valueFn, sort){
+    const dir = sort.dir === 'desc' ? -1 : 1;
+    return items
+      .map((item, idx)=>({item, idx}))
+      .sort((a,b)=>{
+        const va = valueFn(a.item), vb = valueFn(b.item);
+        if(Array.isArray(va)) return dir * (va.length - vb.length);
+        return dir * String(va).localeCompare(String(vb));
+      });
   }
-  function updateFilterButtonStates(){
-    document.querySelectorAll('.col-filter-btn').forEach(btn=>{
-      const table = btn.getAttribute('data-table');
-      const col = btn.getAttribute('data-col');
-      btn.classList.toggle('active', !!filterState[table][col]);
+  function updateSortIndicators(tableId, sort){
+    document.querySelectorAll('#' + tableId + ' th.sortable').forEach(th=>{
+      const ind = th.querySelector('.sort-ind');
+      ind.textContent = th.getAttribute('data-sort') === sort.col ? (sort.dir==='asc' ? '▲' : '▼') : '';
     });
   }
-  function closeFilterPopover(){
-    if(openFilterPopover){ openFilterPopover.remove(); openFilterPopover = null; }
-  }
-  document.addEventListener('click', (e)=>{
-    if(openFilterPopover && !openFilterPopover.contains(e.target) && !e.target.classList.contains('col-filter-btn')){
-      closeFilterPopover();
-    }
-  });
-  function openFilterFor(btn, tableKey, columnKey, allValues, renderFn){
-    closeFilterPopover();
-    if(typeof closeStudentPicker === 'function') closeStudentPicker();
-    const rect = btn.getBoundingClientRect();
-    const displayValues = Array.from(new Set(allValues.map(v=>v || '(blank)'))).sort((a,b)=>a.localeCompare(b));
-    const pop = document.createElement('div');
-    pop.className = 'col-filter-popover';
-    pop.style.top = (rect.bottom + 4) + 'px';
-    pop.style.left = Math.min(rect.left, window.innerWidth - 240) + 'px';
-    pop.innerHTML = `
-      <input type="text" class="filter-input cf-search" placeholder="Search…" style="width:100%; margin-bottom:8px; box-sizing:border-box;">
-      <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
-        <button class="cf-link" data-action="all">Select all</button>
-        <button class="cf-link" data-action="none">Clear</button>
-      </div>
-      <div class="cf-list" style="max-height:200px; overflow-y:auto;"></div>`;
-    document.body.appendChild(pop);
-    openFilterPopover = pop;
-
-    const currentSel = filterState[tableKey][columnKey];
-    function renderList(filterText){
-      const listEl = pop.querySelector('.cf-list');
-      const ft = (filterText||'').toLowerCase();
-      const visible = displayValues.filter(v=>v.toLowerCase().includes(ft));
-      listEl.innerHTML = visible.length ? visible.map(v=>{
-        const checked = !currentSel || currentSel.has(v);
-        return `<label style="display:flex; gap:6px; align-items:center; padding:3px 0; font-size:12.5px;"><input type="checkbox" class="cf-check" value="${escapeHtml(v)}" ${checked?'checked':''}>${escapeHtml(v)}</label>`;
-      }).join('') : '<div class="hint" style="margin:0;">No values.</div>';
-    }
-    renderList('');
-
-    function applyFromPopover(){
-      const checked = Array.from(pop.querySelectorAll('.cf-check:checked')).map(cb=>cb.value);
-      filterState[tableKey][columnKey] = (checked.length === displayValues.length) ? null : new Set(checked);
-      renderFn();
-      updateFilterButtonStates();
-    }
-    pop.querySelector('.cf-search').addEventListener('input', e=>renderList(e.target.value));
-    pop.querySelector('[data-action="all"]').addEventListener('click', ()=>{
-      pop.querySelectorAll('.cf-check').forEach(cb=>cb.checked=true); applyFromPopover();
+  function wireSortHeaders(tableId, stateKey, renderFn){
+    document.querySelectorAll('#' + tableId + ' th.sortable').forEach(th=>{
+      th.addEventListener('click', ()=>{
+        const col = th.getAttribute('data-sort');
+        const s = sortState[stateKey];
+        if(s.col === col){ s.dir = s.dir === 'asc' ? 'desc' : 'asc'; }
+        else { s.col = col; s.dir = 'asc'; }
+        renderFn();
+      });
     });
-    pop.querySelector('[data-action="none"]').addEventListener('click', ()=>{
-      pop.querySelectorAll('.cf-check').forEach(cb=>cb.checked=false); applyFromPopover();
-    });
-    pop.addEventListener('change', e=>{ if(e.target.classList.contains('cf-check')) applyFromPopover(); });
   }
-
-  document.getElementById('studentsTable').addEventListener('click', e=>{
-    const btn = e.target.closest('.col-filter-btn');
-    if(!btn) return;
-    e.stopPropagation();
-    const col = btn.getAttribute('data-col');
-    let allValues;
-    if(col==='grade') allValues = GRADE_LIST.slice();
-    else if(col==='programme') allValues = ['EYP','PYP'];
-    else if(col==='name') allValues = students.map(s=>s.name);
-    else if(col==='family') allValues = students.map(s=>s.family);
-    else allValues = students.map(s=>s.code);
-    openFilterFor(btn, 'students', col, allValues, renderStudentsTable);
-  });
-  document.getElementById('cardsTable').addEventListener('click', e=>{
-    const btn = e.target.closest('.col-filter-btn');
-    if(!btn) return;
-    e.stopPropagation();
-    const col = btn.getAttribute('data-col');
-    let allValues;
-    if(col==='code') allValues = cards.map(c=>c.code);
-    else if(col==='guardian') allValues = cards.map(c=>c.guardian);
-    else if(col==='family') allValues = cards.map(c=>c.family);
-    else allValues = students.map(s=>`${s.name} — ${s.code||'no ID'}`);
-    openFilterFor(btn, 'cards', col, allValues, renderCardsTable);
-  });
-  document.getElementById('clearStudentFilterBtn').addEventListener('click', ()=>{
-    filterState.students = {}; updateFilterButtonStates(); renderStudentsTable();
-  });
-  document.getElementById('clearCardFilterBtn').addEventListener('click', ()=>{
-    filterState.cards = {}; updateFilterButtonStates(); renderCardsTable();
-  });
 
   // ---------- rendering: students ----------
-  function getFilteredStudents(){
-    return students
-      .map((s, idx)=>({s, idx}))
-      .filter(({s})=>{
-        if(!passesColumnFilter('students','name', s.name)) return false;
-        if(!passesColumnFilter('students','code', s.code)) return false;
-        if(!passesColumnFilter('students','grade', s.grade)) return false;
-        if(!passesColumnFilter('students','family', s.family)) return false;
-        if(!passesColumnFilter('students','programme', programForGrade(s.grade))) return false;
-        return true;
-      });
+  function getSortedStudents(){
+    const sort = sortState.students;
+    const valueFn = (s)=>{
+      if(sort.col === 'grade') return GRADE_LIST.indexOf(s.grade);
+      if(sort.col === 'programme') return programForGrade(s.grade);
+      return (s[sort.col] || '');
+    };
+    return sortIndexed(students, valueFn, sort);
   }
   function renderStudentsTable(){
     const body = document.getElementById('studentsBody'); body.innerHTML = '';
-    const filtered = getFilteredStudents();
-    filtered.forEach(({s, idx})=>{
+    updateSortIndicators('studentsTable', sortState.students);
+    const filtered = getSortedStudents();
+    filtered.forEach(({item:s, idx})=>{
       const tr = document.createElement('tr');
       const gradeOptions = GRADE_LIST.map(g=>`<option value="${g}" ${s.grade===g?'selected':''}>${g}</option>`).join('');
       const program = programForGrade(s.grade);
@@ -725,7 +792,7 @@
         <td><button class="row-del" data-idx="${idx}">Remove</button></td>`;
       body.appendChild(tr);
     });
-    document.getElementById('studentsCount').textContent = filtered.length + ' of ' + students.length + ' shown';
+    document.getElementById('studentsCount').textContent = students.length + ' student' + (students.length===1?'':'s');
   }
   document.getElementById('studentsBody').addEventListener('input', e=>{
     const idx=e.target.getAttribute('data-idx'), field=e.target.getAttribute('data-field');
@@ -759,8 +826,8 @@
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet([
       ['Name','ID','Grade','Family','Card Codes','Guardians'],
-      ['Nari Souvannavong','ST1042','Pre-K','Souvannavong','FAM001','Mrs. Souvannavong'],
-      ['Somchai Souvannavong','ST1044','G1','Souvannavong','FAM001','Mrs. Souvannavong'],
+      ['Nari Souvannavong','ST1042','Pre-K','Souvannavong','','Mrs. Souvannavong'],
+      ['Somchai Souvannavong','ST1044','G1','Souvannavong','','Mrs. Souvannavong'],
       ['Ben Xiong','ST1043','G3','Xiong','FAM002; FAM003','Mr. Xiong; Mrs. Xiong']
     ]);
     XLSX.utils.book_append_sheet(wb, ws, 'Students');
@@ -800,6 +867,9 @@
         let studentsAdded = 0;
         const cardMap = new Map();
         const studentByKey = new Map(); // dedupes a student who appears on multiple rows (one per guardian card)
+        const familyGuardianCode = new Map(); // 'family|guardian' -> auto-generated card code, stable within this import
+        const familyCounter = new Map(); // family (lowercased) -> next auto-code number
+        function slug(s){ return (s||'').toString().toUpperCase().replace(/[^A-Z0-9]+/g, ''); }
         rows.forEach(row=>{
           const name = (row.Name || row.name || '').toString().trim();
           if(!name) return;
@@ -821,10 +891,28 @@
           }
 
           const codesPart = (row['Card Codes'] || row['card codes'] || row['Card Code'] || row['card code'] || '').toString().trim();
-          if(!codesPart) return;
           const guardiansPart = (row['Guardians'] || row['guardians'] || row.Guardian || row.guardian || '').toString().trim();
-          const codesList = codesPart.split(';').map(x=>x.trim()).filter(Boolean);
-          const guardiansList = guardiansPart.split(';').map(x=>x.trim());
+          const guardiansList = guardiansPart.split(';').map(x=>x.trim()).filter(Boolean);
+
+          let codesList;
+          if(codesPart){
+            codesList = codesPart.split(';').map(x=>x.trim()).filter(Boolean);
+          } else if(family && guardiansList.length){
+            // No explicit codes: auto-create one card per family+guardian pair, so nothing
+            // needs to be set up by hand in the Cards tab afterward.
+            codesList = guardiansList.map(guardian=>{
+              const key = family.toLowerCase() + '|' + guardian.toLowerCase();
+              if(!familyGuardianCode.has(key)){
+                const n = (familyCounter.get(family.toLowerCase()) || 0) + 1;
+                familyCounter.set(family.toLowerCase(), n);
+                familyGuardianCode.set(key, slug(family) + '-' + n);
+              }
+              return familyGuardianCode.get(key);
+            });
+          } else {
+            codesList = [];
+          }
+
           codesList.forEach((cardCode, i)=>{
             const guardian = guardiansList[i] || '';
             if(!cardMap.has(cardCode)) cardMap.set(cardCode, {code:cardCode, guardian:'', family:'', studentIds:[]});
@@ -848,20 +936,10 @@
   });
 
   // ---------- rendering: cards ----------
-  function getFilteredCards(){
-    return cards
-      .map((c, idx)=>({c, idx}))
-      .filter(({c})=>{
-        if(!passesColumnFilter('cards','code', c.code)) return false;
-        if(!passesColumnFilter('cards','guardian', c.guardian)) return false;
-        if(!passesColumnFilter('cards','family', c.family)) return false;
-        const studentLabels = (c.studentIds||[]).map(sid=>{
-          const st = students.find(x=>x.id===sid);
-          return st ? `${st.name} — ${st.code||'no ID'}` : null;
-        }).filter(Boolean);
-        if(!passesColumnFilter('cards','students', studentLabels)) return false;
-        return true;
-      });
+  function getSortedCards(){
+    cards.forEach(c=>{ c.family = familyForCard(c); });
+    const sort = sortState.cards;
+    return sortIndexed(cards, c=>(c[sort.col] || ''), sort);
   }
   function familyForCard(c){
     const fams = Array.from(new Set((c.studentIds||[]).map(sid=>{
@@ -878,9 +956,9 @@
   }
   function renderCardsTable(){
     const body = document.getElementById('cardsBody'); body.innerHTML = '';
-    const filtered = getFilteredCards();
-    filtered.forEach(({c, idx})=>{
-      c.family = familyForCard(c);
+    updateSortIndicators('cardsTable', sortState.cards);
+    const filtered = getSortedCards();
+    filtered.forEach(({item:c, idx})=>{
       const tr = document.createElement('tr');
       tr.setAttribute('data-row-idx', idx);
       const selectedCount = (c.studentIds||[]).length;
@@ -900,7 +978,7 @@
     });
     updateFamilyCounts();
     renderFamilyTally();
-    document.getElementById('cardsCount').textContent = filtered.length + ' of ' + cards.length + ' shown';
+    document.getElementById('cardsCount').textContent = cards.length + ' card' + (cards.length===1?'':'s');
   }
   function updateCardRowDisplay(idx){
     const tr = document.querySelector('tr[data-row-idx="' + idx + '"]');
@@ -925,7 +1003,6 @@
     }
   });
   function openStudentPicker(btn, idx){
-    closeFilterPopover();
     closeStudentPicker();
     const rect = btn.getBoundingClientRect();
     const familyOptions = Array.from(new Set(students.map(s=>(s.family||'').trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
@@ -1078,8 +1155,8 @@
     return mins >= (16*60+30);
   }
   function filteredRecords(){
-    if(recordsViewMode === 'tardy') return currentRecords.filter(r=>isTardy(r.ts));
-    if(recordsViewMode === 'late') return currentRecords.filter(r=>isLatePickup(r.ts));
+    if(recordsViewMode === 'tardy') return currentRecords.filter(r=>isTardy(r.ts)).sort((a,b)=>a.name.localeCompare(b.name));
+    if(recordsViewMode === 'late') return currentRecords.filter(r=>isLatePickup(r.ts)).sort((a,b)=>a.name.localeCompare(b.name));
     return currentRecords;
   }
   function renderRecordsView(){
@@ -1109,14 +1186,17 @@
     const label = recordsViewMode==='all' ? ' this month' : (recordsViewMode==='tardy' ? ' tardy arrivals' : ' late pick-ups');
     document.getElementById('recordCount').textContent = rows.length + ' scan' + (rows.length===1?'':'s') + label;
   }
-  document.querySelectorAll('.view-mode-btn').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      document.querySelectorAll('.view-mode-btn').forEach(b=>b.classList.remove('active'));
-      btn.classList.add('active');
-      recordsViewMode = btn.dataset.mode;
-      renderRecordsView();
+  function wireViewModeButtons(containerId, onSelect){
+    const buttons = Array.from(document.querySelectorAll('#' + containerId + ' .view-mode-btn'));
+    buttons.forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        buttons.forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        onSelect(btn.dataset.mode);
+      });
     });
-  });
+  }
+  wireViewModeButtons('view-records', mode=>{ recordsViewMode = mode; renderRecordsView(); });
 
   function loadRecords(){
     const monthKey = recordMonthInput.value;
@@ -1158,8 +1238,250 @@
   document.querySelectorAll('.tab').forEach(tab=>{
     tab.addEventListener('click', ()=>{
       if(tab.dataset.view === 'records') loadRecords();
+      if(tab.dataset.view === 'staffrecords') loadStaffRecords();
     });
   });
+
+  // ---------- staff & bus cards ----------
+  function getSortedStaff(){
+    const sort = sortState.staff;
+    return sortIndexed(staff, s=>(s[sort.col] || ''), sort);
+  }
+  function renderStaffTable(){
+    const body = document.getElementById('staffBody'); if(!body) return;
+    body.innerHTML = '';
+    updateSortIndicators('staffTable', sortState.staff);
+    getSortedStaff().forEach(({item:s, idx})=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="text" data-idx="${idx}" data-field="name" value="${escapeHtml(s.name)}"></td>
+        <td><select data-idx="${idx}" data-field="type">
+          <option value="Staff" ${s.type==='Staff'?'selected':''}>Staff</option>
+          <option value="Bus" ${s.type==='Bus'?'selected':''}>Bus</option>
+        </select></td>
+        <td><input type="text" data-idx="${idx}" data-field="code" value="${escapeHtml(s.code)}"></td>
+        <td><button class="row-del" data-idx="${idx}">Remove</button></td>`;
+      body.appendChild(tr);
+    });
+    document.getElementById('staffCount').textContent = staff.length + ' staff/bus card' + (staff.length===1?'':'s');
+  }
+  document.getElementById('staffBody').addEventListener('input', e=>{
+    const idx=e.target.getAttribute('data-idx'), field=e.target.getAttribute('data-field');
+    if(idx===null || !field) return; staff[idx][field]=e.target.value;
+  });
+  document.getElementById('staffBody').addEventListener('change', e=>{
+    const idx=e.target.getAttribute('data-idx'), field=e.target.getAttribute('data-field');
+    if(idx===null || !field) return; staff[idx][field]=e.target.value;
+  });
+  document.getElementById('staffBody').addEventListener('click', e=>{
+    if(e.target.classList.contains('row-del')){ staff.splice(e.target.getAttribute('data-idx'),1); renderStaffTable(); }
+  });
+  document.getElementById('addStaffBtn').addEventListener('click', ()=>{
+    staff.push({id:genId(), name:'', type:'Staff', code:''}); renderStaffTable();
+  });
+  document.getElementById('saveStaffBtn').addEventListener('click', ()=>{
+    const note=document.getElementById('staffNote'); note.textContent='Saving…';
+    window.CheckinDB.saveStaff(staff).then(()=>{ note.textContent='Saved.'; setTimeout(()=>{note.textContent='';},1800); })
+      .catch(err=>{ note.textContent='Save failed — '+err; });
+  });
+  document.getElementById('deleteStaffBtn').addEventListener('click', ()=>{
+    if(confirm('Delete ALL staff/bus cards? This can\'t be undone.')){
+      staff = []; renderStaffTable();
+      const note=document.getElementById('staffNote'); note.textContent='Deleting…';
+      window.CheckinDB.saveStaff([]).then(()=>{ note.textContent='All staff deleted.'; setTimeout(()=>{note.textContent='';},1800); });
+    }
+  });
+  document.getElementById('downloadStaffWorkbookBtn').addEventListener('click', ()=>{
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Name','Type','Code'],
+      ['Bounmy Keo','Staff','STF001'],
+      ['Bus 3 — Somsak','Bus','BUS003']
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Staff');
+    XLSX.writeFile(wb, 'staff-template.xlsx');
+  });
+  document.getElementById('exportStaffDataBtn').addEventListener('click', ()=>{
+    const rows = staff.map(s=>[s.name, s.type, s.code]);
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([['Name','Type','Code'], ...rows]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Staff');
+    XLSX.writeFile(wb, 'staff-export.xlsx');
+  });
+  document.getElementById('uploadStaffWorkbook').addEventListener('change', (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const note = document.getElementById('staffWorkbookNote');
+    note.textContent = 'Reading…';
+    const reader = new FileReader();
+    reader.onload = (ev)=>{
+      try{
+        const data = new Uint8Array(ev.target.result);
+        const wb = XLSX.read(data, {type:'array'});
+        const sheet = wb.Sheets['Staff'] || wb.Sheets[wb.SheetNames[0]];
+        if(!sheet) throw new Error('No sheet found in that file');
+        const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
+        let added = 0;
+        rows.forEach(row=>{
+          const name = (row.Name || row.name || '').toString().trim();
+          if(!name) return;
+          const typeRaw = (row.Type || row.type || '').toString().trim().toLowerCase();
+          const type = typeRaw === 'bus' ? 'Bus' : 'Staff';
+          const code = (row.Code || row.code || '').toString().trim();
+          staff.push({id:genId(), name:name, type:type, code:code});
+          added++;
+        });
+        renderStaffTable();
+        note.textContent = 'Added ' + added + ' row' + (added===1?'':'s') + ' — review, then click Save staff.';
+      }catch(err){
+        note.textContent = 'Could not read that file — ' + err;
+      }
+      e.target.value = '';
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  // ---------- staff records ----------
+  const staffRecordMonthInput = document.getElementById('staffRecordMonth');
+  (function initStaffMonth(){
+    const now = new Date();
+    staffRecordMonthInput.value = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  })();
+  let currentStaffRecords = [];
+  let staffRecordsViewMode = 'all';
+
+  function isStaffTardy(ts){
+    const d = new Date(ts);
+    const mins = d.getHours()*60 + d.getMinutes();
+    return mins >= (8*60) && mins < (8*60+30);
+  }
+  function filteredStaffRecords(){
+    if(staffRecordsViewMode === 'tardy') return currentStaffRecords.filter(r=>isStaffTardy(r.ts)).sort((a,b)=>a.name.localeCompare(b.name));
+    return currentStaffRecords;
+  }
+  function renderStaffRecordsView(){
+    const rows = filteredStaffRecords();
+    const tallySection = document.getElementById('staffTallySection');
+    if(staffRecordsViewMode === 'all'){
+      tallySection.style.display = 'none';
+    } else {
+      tallySection.style.display = 'block';
+      const tally = {};
+      rows.forEach(r=>{
+        const key = r.staffId || r.name;
+        if(!tally[key]) tally[key] = {name:r.name, type:r.type, count:0};
+        tally[key].count++;
+      });
+      const list = Object.values(tally).sort((a,b)=> b.count - a.count || a.name.localeCompare(b.name));
+      document.getElementById('staffTallyBody').innerHTML = list.length
+        ? list.map(t=>`<tr><td>${escapeHtml(t.name)}</td><td>${escapeHtml(t.type)}</td><td>${t.count}</td></tr>`).join('')
+        : '<tr><td colspan="3" class="empty-row">No entries.</td></tr>';
+    }
+    const body = document.getElementById('staffRecordsBody'); body.innerHTML='';
+    rows.forEach(r=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.time)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.type)}</td>`;
+      body.appendChild(tr);
+    });
+    const label = staffRecordsViewMode==='all' ? ' this month' : ' tardy arrivals';
+    document.getElementById('staffRecordCount').textContent = rows.length + ' scan' + (rows.length===1?'':'s') + label;
+  }
+  wireViewModeButtons('view-staffrecords', mode=>{ staffRecordsViewMode = mode; renderStaffRecordsView(); });
+
+  function loadStaffRecords(){
+    const monthKey = staffRecordMonthInput.value;
+    if(!monthKey) return;
+    document.getElementById('staffRecordCount').textContent = 'Loading…';
+    window.CheckinDB.getStaffMonthLog(monthKey).then(rows=>{
+      currentStaffRecords = rows;
+      renderStaffRecordsView();
+    });
+  }
+  document.getElementById('loadStaffRecordsBtn').addEventListener('click', loadStaffRecords);
+  document.getElementById('exportStaffRecordsBtn').addEventListener('click', ()=>{
+    if(!currentStaffRecords.length){ loadStaffRecords(); return; }
+    const rows = filteredStaffRecords();
+    const header = ['Date','Time','Name','Type'];
+    const body = rows.map(r=>[r.date,r.time,r.name,r.type]);
+    const csv = [header, ...body].map(row=>row.map(v=>`"${(v||'').toString().replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'staff-checkin-' + staffRecordsViewMode + '-' + staffRecordMonthInput.value + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+  document.getElementById('deleteStaffRecordsBtn').addEventListener('click', ()=>{
+    const monthKey = staffRecordMonthInput.value;
+    if(!monthKey) return;
+    if(confirm('Delete ALL staff scan records for ' + monthKey + '? Make sure you\'ve exported a copy first — this can\'t be undone.')){
+      document.getElementById('staffRecordCount').textContent = 'Deleting…';
+      window.CheckinDB.deleteStaffMonthLog(monthKey).then(()=>{
+        currentStaffRecords = [];
+        renderStaffRecordsView();
+        document.getElementById('staffRecordCount').textContent = 'Records for ' + monthKey + ' deleted.';
+      }).catch(err=>{
+        document.getElementById('staffRecordCount').textContent = 'Delete failed — ' + err;
+      });
+    }
+  });
+
+  // wire up sort-header clicks now that all render functions exist
+  wireSortHeaders('studentsTable', 'students', renderStudentsTable);
+  wireSortHeaders('cardsTable', 'cards', renderCardsTable);
+  wireSortHeaders('staffTable', 'staff', renderStaffTable);
+
+  // ---------- PIN lock ----------
+  (function(){
+    const ADMIN_PIN = '42688663';
+    const lock = document.getElementById('pinLock');
+    const dotsEl = document.getElementById('pinDots');
+    let buffer = '';
+
+    if(sessionStorage.getItem('dis_admin_unlocked') === '1'){
+      lock.style.display = 'none';
+      return;
+    }
+
+    function renderDots(){
+      dotsEl.innerHTML = '';
+      for(let i=0;i<ADMIN_PIN.length;i++){
+        const dot = document.createElement('div');
+        dot.className = 'pin-dot' + (i < buffer.length ? ' filled' : '');
+        dotsEl.appendChild(dot);
+      }
+    }
+    renderDots();
+
+    function wrongPin(){
+      dotsEl.classList.add('shake');
+      setTimeout(()=>{ dotsEl.classList.remove('shake'); buffer=''; renderDots(); }, 400);
+    }
+    function pressKey(key){
+      if(key === 'back'){ buffer = buffer.slice(0,-1); renderDots(); return; }
+      if(buffer.length >= ADMIN_PIN.length) return;
+      buffer += key;
+      renderDots();
+      if(buffer.length === ADMIN_PIN.length){
+        if(buffer === ADMIN_PIN){
+          sessionStorage.setItem('dis_admin_unlocked', '1');
+          lock.style.display = 'none';
+        } else {
+          wrongPin();
+        }
+      }
+    }
+    document.getElementById('pinPad').addEventListener('click', e=>{
+      const btn = e.target.closest('.pin-key');
+      if(!btn) return;
+      pressKey(btn.getAttribute('data-key'));
+    });
+    document.addEventListener('keydown', e=>{
+      if(lock.style.display === 'none') return;
+      if(e.key >= '0' && e.key <= '9') pressKey(e.key);
+      else if(e.key === 'Backspace') pressKey('back');
+    });
+  })();
 
   // ---------- scan input + tabs ----------
   const scanInput = document.getElementById('scanInput');

@@ -89,6 +89,7 @@
     onStudents(cb){ onValue(ref(db, 'students'), snap=>{ const v=snap.val()||{}; cb(Object.entries(v).map(([id,d])=>({id, name:d.name||'', grade:d.grade||'Nursery'}))); }); },
     onCards(cb){ onValue(ref(db, 'cards'), snap=>{ const v=snap.val()||{}; cb(Object.entries(v).map(([code,d])=>({code, guardian:d.guardian||'', studentIds:d.studentIds||[]}))); }); },
     onQueues(cb){ onValue(ref(db, 'queues'), snap => cb(snap.val() || {EYP:[], PYP:[]})); },
+    onStaff(cb){ onValue(ref(db, 'staff'), snap=>{ const v=snap.val()||{}; cb(Object.entries(v).map(([id,d])=>({id, name:d.name||'', type:d.type||'Staff', code:d.code||''}))); }); },
     saveQueue(program, list){ return set(ref(db, 'queues/' + program), list); },
     logScan(entry, program){
       const now = new Date();
@@ -97,6 +98,15 @@
       return set(r, {
         studentId: entry.studentId, name: entry.name, grade: entry.grade, program,
         guardian: entry.guardian || '', code: entry.code || '',
+        date: now.toLocaleDateString(), time: entry.time, ts: now.getTime()
+      });
+    },
+    logStaffScan(entry){
+      const now = new Date();
+      const monthKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+      const r = push(ref(db, 'staffScanLog/' + monthKey));
+      return set(r, {
+        staffId: entry.staffId, name: entry.name, type: entry.type,
         date: now.toLocaleDateString(), time: entry.time, ts: now.getTime()
       });
     }
@@ -111,6 +121,7 @@
 
   let students = [];
   let cards = [];
+  let staff = [];
   let queues = {EYP:[], PYP:[]};
 
   function whenReady(fn){
@@ -119,6 +130,7 @@
   whenReady(()=>{
     window.CheckinDB.onStudents(data=>{ students = data; });
     window.CheckinDB.onCards(data=>{ cards = data; });
+    window.CheckinDB.onStaff(data=>{ staff = data; });
     window.CheckinDB.onQueues(data=>{ queues = { EYP:(data.EYP||[]).filter(Boolean), PYP:(data.PYP||[]).filter(Boolean) }; });
   });
 
@@ -151,12 +163,26 @@
     playTone(1400, 180, 1.0, 400);
     playTone(900,  180, 1.0, 600);
   }
+  function playUnauthorizedAlert(){
+    // Deliberately different from playAlert() (low, long, mournful vs. high and quick)
+    // so security staff can tell "checked in" from "unauthorized" by ear alone.
+    playTone(220, 500, 1.0, 0);
+    playTone(196, 700, 1.0, 550);
+  }
 
   async function checkInCard(rawCode){
     const code = (rawCode||'').trim();
     if(!code) return {ok:false};
     const cardEntry = cards.find(c => c.code.trim().toLowerCase() === code.toLowerCase());
-    if(!cardEntry) return {ok:false, notFound:true, code:code};
+    if(!cardEntry){
+      const staffEntry = staff.find(s => (s.code||'').trim().toLowerCase() === code.toLowerCase());
+      if(staffEntry){
+        const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+        await window.CheckinDB.logStaffScan({staffId:staffEntry.id, name:staffEntry.name, type:staffEntry.type, time:time});
+        return {ok:true, kind:'staff', name:staffEntry.name, type:staffEntry.type, time:time};
+      }
+      return {ok:false, notFound:true, code:code};
+    }
 
     const results = [];
     for(const studentId of (cardEntry.studentIds || [])){
@@ -181,8 +207,15 @@
     const fb = document.getElementById('feedback');
     checkInCard(code).then(res=>{
       if(!res.ok){
+        playUnauthorizedAlert();
         fb.className = 'feedback bad';
-        fb.innerHTML = `<div><div class="fb-name">ບໍ່ພົບບັດ</div><div class="fb-sub">"${escapeHtml(code)}" ຍັງບໍ່ໄດ້ຕິດພັນກັບນັກຮຽນ.</div></div>`;
+        fb.innerHTML = `<div><div class="fb-name">ບໍ່ໄດ້ຮັບອະນຸຍາດຜ່ານ</div><div class="fb-sub">ກະລຸນາໃຫ້ຈອດລົດ ແລະ ແຈ້ງຫ້ອງການ (code "${escapeHtml(code)}" not recognized — please have them park and inform the front office).</div></div>`;
+        return;
+      }
+      if(res.kind === 'staff'){
+        playAlert();
+        fb.className = 'feedback ok';
+        fb.innerHTML = `<div><div class="fb-name">${escapeHtml(res.name)}</div><div class="fb-sub">ພະນັກງານເຊັກອິນແລ້ວ — ${escapeHtml(res.type)} · ${escapeHtml(res.time)}</div></div>`;
         return;
       }
       if(!res.results.length){
